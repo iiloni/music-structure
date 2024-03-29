@@ -6,6 +6,7 @@
         "serve": "vue-cli-service serve",
         "build": "vue-cli-service build --max_old_space_size=4096",
         "lint": "vue-cli-service lint",
+        "production": "vue-cli-service serve --mode production",
         "test": "mocha --require @babel/register"
     },
     "dependencies": {
