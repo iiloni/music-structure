@@ -9,9 +9,12 @@
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.4" GeneratePathProperty="true" />
     <EmbeddedResource Include="../viewer/dist/**/*">
       <LogicalName>viewer/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="$(PkgMicrosoft_ML_OnnxRuntime)/LICENSE" LogicalName="viewer/onnx-runtime-license.txt" />
+    <EmbeddedResource Include="$(PkgMicrosoft_ML_OnnxRuntime)/ThirdPartyNotices.txt" LogicalName="viewer/onnx-runtime-notices.txt" />
   </ItemGroup>
   <Target Name="RequireViewer" BeforeTargets="PrepareForBuild">
     <Error Condition="!Exists('../viewer/dist/index.html')" Text="Build mvp/viewer with npm ci and npm run build first." />

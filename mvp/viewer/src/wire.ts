@@ -16,7 +16,24 @@ export interface Mark extends Passage {
   otherStart: number | null; otherEnd: number | null; score: number | null;
   deltaHz: number | null; detectedAt: number | null;
 }
-export interface Source { pid: number; started: string; label: string }
+export interface Source { pid: number; started: string; label: string; kind: "spotify" | "local" }
+export interface MlPoint extends Passage {
+  run: number; novelty: number | null; inputMs: number; inferenceMs: number; afterWindowMs: number | null;
+}
+export type PersistenceVerdict = "provisional" | "brief" | "lasting" | "uncertain";
+export interface PersistenceCue {
+  id: number; time: number; referenceStart: number; referenceEnd: number; dueAt: number;
+  spectrum: PersistenceVerdict; embedding: PersistenceVerdict;
+  confirmedAt: number | null; reason: string | null;
+  spectrumDistance: number; embeddingDistance: number;
+}
+export interface PersistenceReport {
+  horizonSeconds: number; comparisons: number; processingMs: number; cues: PersistenceCue[];
+}
+export interface MlSnapshot {
+  state: "loading" | "warmup" | "ready" | "silence" | "unavailable" | "stopped";
+  detail: string; threshold: number; droppedPackets: number; points: MlPoint[]; persistence: PersistenceReport;
+}
 export interface Counters {
   packets: number; frames: number; queueDroppedPackets: number; queueDroppedFrames: number;
   discontinuities: number; timestampErrors: number; missingSeconds: number; maxGapSeconds: number;
@@ -26,13 +43,13 @@ export interface RefinedMap extends Passage { version: string; marks: Mark[] }
 export interface Batch {
   version: 1; analysisVersion: string; sessionId: string; sequence: number;
   state: "ready" | "waiting" | "capturing" | "loading" | "stopping" | "stopped" | "unavailable";
-  status: string; mode: "spotify" | "fixture" | "replay" | null; source: string | null;
+  status: string; mode: "spotify" | "local" | "fixture" | "replay" | null; source: string | null;
   elapsed: number; historyStart: number; inputDb: number | null; counters: Counters;
   frames: Frame[]; marks: Mark[] | null; sources: Source[] | null; snapshot: boolean; windowsCapture: boolean;
-  refining: boolean; refined: RefinedMap | null;
+  refining: boolean; refined: RefinedMap | null; ml: MlSnapshot | null;
 }
 export type MapState = Batch & { marks: Mark[]; sources: Source[] };
-type Command = { action: "start" | "stop" | "new" | "sources" | "refine"; sessionId?: string; mode?: string; fixture?: string; pid?: number; started?: string };
+type Command = { action: "start" | "stop" | "new" | "sources" | "refine"; sessionId?: string; mode?: string; fixture?: string; pid?: number; started?: string; ml?: boolean };
 type Clock = { t0: number; t1: number; t2: number };
 type Alignment = { offset: number; uncertainty: number; received: number };
 
@@ -102,6 +119,7 @@ export function useHelper() {
             ...reply,
             frames: (replace ? reply.frames : (previous?.frames ?? []).concat(reply.frames))
               .filter(frame => frame.end > reply.historyStart),
+            ml: reply.ml ?? (replace ? null : previous?.ml ?? null),
             marks: reply.marks ?? (replace ? [] : previous?.marks ?? []),
             sources: reply.sources ?? previous?.sources ?? [],
           };

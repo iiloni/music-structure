@@ -5,7 +5,7 @@ namespace MusicStructure;
 sealed class Cursor
 {
     public string? Session;
-    public long Revision = -1, Marks = -1, Sources = -1, State = -1, Frame, Sequence;
+    public long Revision = -1, Marks = -1, Sources = -1, State = -1, Ml = -1, Frame, Sequence;
 }
 
 sealed class Session
@@ -14,7 +14,7 @@ sealed class Session
     Listen? listen;
     CancellationTokenSource? stop;
     Task? running;
-    string state = "ready", status = "Choose Spotify or open a fixture.";
+    string state = "ready", status = "Choose a playback source or open a fixture.";
     long stateRevision, sourceRevision;
     Source[] sources = [];
     RefinedMap? refined;
@@ -36,23 +36,27 @@ sealed class Session
         lock (gate) SetState(state, message);
     }
 
-    public void Start(string mode, string? fixture, int pid, long started)
+    public void Start(string mode, string? fixture, int pid, long started, bool mlEnabled = false)
     {
         lock (gate)
         {
             if (running is not null || refining) throw new InvalidOperationException("Wait for the current operation to finish.");
+            if (mlEnabled && !AllowsMl(mode, fixture))
+                throw new InvalidOperationException("ML texture analysis is available for VLC local playback and the ML control.");
             Source? target = null;
             string label;
-            if (mode == "spotify")
+            if (mode is "spotify" or "local")
             {
-                target = sources.FirstOrDefault(s => s.Pid == pid && s.Started == started)
-                    ?? throw new InvalidOperationException("Refresh and select a Spotify desktop process.");
+                target = sources.FirstOrDefault(s => s.Kind == mode && s.Pid == pid && s.Started == started)
+                    ?? throw new InvalidOperationException("Refresh and select a supported playback process.");
                 label = target.Label;
             }
             else
             {
                 if (mode is not ("fixture" or "replay") || !Fixtures.Names.Contains(fixture))
                     throw new InvalidOperationException("Choose a known fixture.");
+                if (fixture == "ml" && (mode != "fixture" || !mlEnabled))
+                    throw new InvalidOperationException("Use Run ML control for the live model fixture.");
                 label = fixture!;
             }
 
@@ -66,9 +70,10 @@ sealed class Session
                 listen!.Source = label;
                 listen.Gap(epoch, "Capture restarted");
             }
-            else listen = new Listen(epoch, mode, label);
+            else listen = new Listen(epoch, mode, label, mlEnabled ? new MlPipeline(Musicnn.ModelPath) : null);
+            var ml = listen!.Ml;
             SetState(mode == "replay" ? "loading" : "waiting",
-                mode == "spotify" ? "Waiting for local Spotify audio." : "Preparing generated fixture.");
+                target is not null ? $"Waiting for {target.ProcessName} audio." : "Preparing generated fixture.");
             running = Task.Run(async () =>
             {
                 try
@@ -80,10 +85,12 @@ sealed class Session
                     }
                     else await Stream(target, fixture, epoch, token);
 
-                    lock (gate) SetState("stopped", mode == "spotify" ? "Capture stopped." : "Fixture map ready to review.");
+                    if (ml is not null) await ml.Finish(listen!.Elapsed);
+                    lock (gate) SetState("stopped", target is not null ? "Capture stopped." : "Fixture map ready to review.");
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
+                    if (ml is not null) await ml.Finish(listen!.Elapsed);
                     lock (gate) SetState("stopped", "Capture stopped.");
                 }
                 catch (Exception ex)
@@ -91,11 +98,12 @@ sealed class Session
                     Console.Error.WriteLine(ex);
                     lock (gate)
                     {
-                        if (mode == "spotify" && listen!.Elapsed > 0)
-                            listen.Gap(Clock.Milliseconds, "Spotify capture interrupted");
-                        SetState("unavailable", mode == "spotify"
-                            ? $"Spotify capture unavailable (0x{ex.HResult:X8}). {ex.Message}" : ex.Message);
+                        if (target is not null && listen!.Elapsed > 0)
+                            listen.Gap(Clock.Milliseconds, "Player capture interrupted");
+                        SetState("unavailable", target is not null
+                            ? $"Player capture unavailable (0x{ex.HResult:X8}). {ex.Message}" : ex.Message);
                     }
+                    if (ml is not null) await ml.Finish(listen!.Elapsed);
                 }
                 finally
                 {
@@ -109,6 +117,8 @@ sealed class Session
             });
         }
     }
+
+    internal static bool AllowsMl(string mode, string? fixture) => mode == "local" || (mode == "fixture" && fixture == "ml");
 
     async Task Stream(Source? target, string? fixture, double epoch, CancellationToken token)
     {
@@ -160,10 +170,10 @@ sealed class Session
                     if (packet.StartMs < current.StartedMs) continue;
                     current.Add(packet, includePaintClock: true);
                     bool audible = current.InputDb is >= -58 && !packet.IsGap;
-                    string connection = target is null ? "Generated fixture" : "Spotify process loopback";
+                    string connection = target is null ? "Generated fixture" : $"{target.Label} process loopback";
                     if (state != "stopping")
                         SetState(audible ? "capturing" : "waiting", audible ? connection :
-                            packet.Interruption ?? (target is null ? "Fixture silence" : "Waiting for local Spotify audio."));
+                            packet.Interruption ?? (target is null ? "Fixture silence" : $"Waiting for {target.ProcessName} audio."));
                 }
             }
         }
@@ -199,10 +209,11 @@ sealed class Session
     {
         lock (gate)
         {
-            if (running is null || listen?.Mode != "spotify" || state is not ("capturing" or "waiting"))
-                throw new InvalidOperationException("Start Spotify capture before beginning a new listen.");
-            listen = new Listen(Clock.Milliseconds, "spotify", listen.Source);
-            SetState("waiting", "New listen. Waiting for local Spotify audio.");
+            if (running is null || listen?.Mode is not ("spotify" or "local") || state is not ("capturing" or "waiting"))
+                throw new InvalidOperationException("Start player capture before beginning a new listen.");
+            listen.Ml?.Reset(newListen: true);
+            listen = new Listen(Clock.Milliseconds, listen.Mode, listen.Source, listen.Ml);
+            SetState("waiting", "New listen. Waiting for audio.");
         }
     }
 
@@ -242,7 +253,8 @@ sealed class Session
             string id = listen?.Id ?? "";
             bool snapshot = cursor.Session != id;
             long revision = listen?.Revision ?? 0;
-            if (!snapshot && cursor.Revision == revision && cursor.State == stateRevision && cursor.Sources == sourceRevision)
+            var ml = listen?.Ml?.Read(ref cursor.Ml, snapshot, listen.HistoryStart);
+            if (ml is null && !snapshot && cursor.Revision == revision && cursor.State == stateRevision && cursor.Sources == sourceRevision)
                 return null;
 
             Feature[] frames = listen?.Frames.Where(f => snapshot || f.Index > cursor.Frame).ToArray() ?? [];
@@ -252,7 +264,7 @@ sealed class Session
                 listen?.Mode, listen?.Source, listen?.Elapsed ?? 0, listen?.HistoryStart ?? 0, listen?.InputDb,
                 listen?.Counters ?? new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), frames, marks, snapshot,
                 cursor.Sources != sourceRevision ? sources : null,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) && Environment.Is64BitProcess, refining, refined);
+                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) && Environment.Is64BitProcess, refining, refined, ml);
             if (snapshot) cursor.Frame = 0;
             if (frames.Length > 0) cursor.Frame = frames[^1].Index;
             cursor.Session = id;

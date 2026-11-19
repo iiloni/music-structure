@@ -187,3 +187,29 @@ meter::-webkit-meter-optimum-value { border-radius: 10px; background: #218264; }
 .comparison { margin-left: auto; }
 .comparison [role="group"] { display: flex; gap: 3px; }
 .comparison button[aria-pressed="true"] { background: #aeaeff; border-color: #aeaeff; color: #18264c; }
+
+.ml-opt-in { display: inline-flex; align-items: start; gap: 7px; font-size: .83rem; }
+.ml-opt-in input { accent-color: #8e6d29; }
+.ml-opt-in small { display: block; margin-top: 2px; color: var(--weak); }
+.ml-status {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px;
+  padding: 7px 20px; border-top: 1px solid #36446e; color: #ead6ab; font-size: .77rem;
+}
+.ml-lane i { margin-right: 4px; }
+@media (max-width: 680px) { .ml-status { padding-inline: 12px; } }
+
+.persistence {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px;
+  padding: 8px 20px; border-top: 1px solid #36446e; color: #bac5e0; font-size: .8rem;
+}
+.persistence-views { display: flex; gap: 4px; }
+.persistence button, .persistence select {
+  color-scheme: dark; background: #25365e; border: 1px solid #617195; color: #f5f6ff;
+  border-radius: 4px; padding: 4px 6px;
+}
+.persistence button[aria-pressed="true"] { background: #f5d58b; border-color: #f5d58b; color: #18264c; }
+.persistence :focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.persistence label { display: flex; align-items: center; gap: 7px; }
+.persistence-verdict { font-variant-numeric: tabular-nums; }
+.persistence-verdict strong { color: #f5d58b; margin-right: 4px; }
+@media (max-width: 680px) { .persistence { padding-inline: 12px; } }

@@ -14,11 +14,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\mvp\scripts\Build-Wind
 
 The build checks TypeScript, bundles React and the fonts into the helper, and publishes a self-contained x64 executable. Once built, the helper needs no SDK, Node.js, Spotify credentials or internet access. It prints a local URL and opens it in the default browser. Use `--no-open` to paste the URL yourself. Use `--demo` to open the A–B–A replay immediately. The bundled viewer licenses are served at `/viewer-licenses.txt`.
 
-1. Open Spotify desktop, play locally on the intended output and choose its process in **Source**. If Spotify opened after the helper page, use **Refresh Spotify sources**.
+1. Open Spotify desktop, play locally on the intended output and choose its process in **Source**. If Spotify opened after the helper page, use **Refresh playback sources**.
 2. Choose **Start capture**. The status and dBFS meter distinguish arriving Spotify audio from waiting. Use **New listen** at a track boundary or after seeking.
 3. Select a repeat link, texture marker or gap. Tab focus also selects a marker. Escape clears the selection. The time ruler uses elapsed capture time. Use **Timbre smoothing** to choose Off, 0.5, 1, 2 or 4 seconds. The live contour averages recent brightness measurements, with a one-second window by default. Longer windows tame spikes and take longer to settle after sharp changes. Choose **Off** to see each quarter-second measurement. In the song map, set **Timbre scale** to **Relative** to spread out the visible range after four seconds of audible features. **Fixed** keeps the same axis across listens.
 4. Choose **Stop** to freeze the score, then open **Evaluation summary**. Add setup notes and save timestamped features, findings and counters as JSON. Closing the listening tab stops capture. Press Ctrl+C in the helper console to exit.
-5. After a Spotify restart or capture error, **Refresh Spotify sources** and **Resume capture**. This preserves available history and places a gap before newly captured material. Use **New listen** to clear the map.
+5. After a Spotify restart or capture error, **Refresh playback sources** and **Resume capture**. This preserves available history and places a gap before newly captured material. Use **New listen** to clear the map.
+
+## Experimental ML texture and persistence A/B
+
+For VLC process capture, model installation, and the listening comparison, see the [ML texture guide](ML-TEXTURE.md). It also records the generated control results and CPU measurements.
 
 ## Try the listening lab
 

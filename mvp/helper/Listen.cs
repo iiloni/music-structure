@@ -6,14 +6,15 @@ record Counters(long Packets, long Frames, long QueueDroppedPackets, long QueueD
 record Batch(int Version, string AnalysisVersion, string SessionId, long Sequence, string State,
     string Status, string? Mode, string? Source, double Elapsed, double HistoryStart, double? InputDb,
     Counters Counters, Feature[] Frames, Mark[]? Marks, bool Snapshot, Source[]? Sources, bool WindowsCapture,
-    bool Refining, RefinedMap? Refined);
+    bool Refining, RefinedMap? Refined, MlSnapshot? Ml);
 
-sealed class Listen(double startMs, string mode, string source)
+sealed class Listen(double startMs, string mode, string source, MlPipeline? ml = null)
 {
     public const string AnalysisVersion = "score-3";
     public const double HistorySeconds = 600;
     public string Id { get; } = Guid.NewGuid().ToString("N");
     public string Mode { get; } = mode;
+    public MlPipeline? Ml { get; } = ml;
     public string Source { get; set; } = source;
     public double StartedMs { get; } = startMs;
     public double Elapsed { get; private set; }
@@ -84,6 +85,7 @@ sealed class Listen(double startMs, string mode, string source)
         packetEndMs = audioStart + durationMs;
         packetStampEndMs = packet.StartMs + durationMs;
         Elapsed = Seconds(packetEndMs.Value);
+        Ml?.Offer(packet, Seconds(audioStart));
         packets++;
         pcmFrames += packet.Frames;
         structure ??= new Structure(Publish, () => ++markId);
@@ -102,6 +104,7 @@ sealed class Listen(double startMs, string mode, string source)
             };
             frame = frame with { Lanes = additional.Add(frame, segmentStart, pitches) };
             Frames.Enqueue(frame);
+            Ml?.OfferFeature(frame);
             InputDb = rms;
             coverageEnd = sessionEnd;
             structure.Add(frame);
@@ -125,6 +128,7 @@ sealed class Listen(double startMs, string mode, string source)
             features.Reset();
             structure?.Reset();
             additional?.Reset();
+            Ml?.Reset(end);
             segment++;
         }
         else openGap = openGap with { End = end };

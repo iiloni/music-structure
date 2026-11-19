@@ -16,17 +16,21 @@ export function markName(mark: Mark) {
 }
 
 const repeatColor = "#aeaeff", contourColor = "#9cebd6", markerColor = "#ffab86";
+const mlColor = "#f5d58b";
+const mlHeight = 66;
 const ink = "#18264c", grid = "#36446e", faint = "#aab8d6";
 const top = 5, repeatBaseline = 123, contourTop = 163, contourBottom = 283;
 
-export function Score({ map, selected, select, timbreScale, smoothing, lanes, refined }: {
-  map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale; smoothing: TimbreWindow; lanes: readonly Lane[]; refined: boolean;
+export function Score({ map, selected, select, timbreScale, smoothing, lanes, refined, mlCueTime }: {
+  map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale; smoothing: TimbreWindow; lanes: readonly Lane[]; refined: boolean; mlCueTime?: number;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(0);
   const [inspection, setInspection] = useState<{ session: string; seconds: number }>();
-  let timelineBottom = 303;
+  const mlTop = 303;
+  const ml = map?.ml;
+  let timelineBottom = mlTop + (ml ? mlHeight : 0);
   const rows: LaneRow[] = [];
   for (const lane of laneDefinitions) {
     if (!lanes.includes(lane.id)) continue;
@@ -109,7 +113,8 @@ export function Score({ map, selected, select, timbreScale, smoothing, lanes, re
       context.textAlign = at < 22 ? "left" : at > width - 22 ? "right" : "center";
       context.fillText(time(second), at, timelineBottom + 18);
     }
-    for (const y of [repeatBaseline, contourTop, (contourTop + contourBottom) / 2, contourBottom, 303, ...rows.map(row => row.top + row.height)])
+    for (const y of [repeatBaseline, contourTop, (contourTop + contourBottom) / 2, contourBottom, mlTop,
+      ...(ml ? [mlTop + mlHeight] : []), ...rows.map(row => row.top + row.height)])
       line(14, y, width - 16, y, grid);
 
     for (const mark of events.filter(event => event.kind === "gap")) {
@@ -178,6 +183,34 @@ export function Score({ map, selected, select, timbreScale, smoothing, lanes, re
     }
     flush();
 
+    if (ml) {
+      const base = mlTop + mlHeight - 8;
+      const range = Math.max(.05, ml.threshold * 4);
+      const y = (score: number) => base - Math.min(1, score / range) * (mlHeight - 17);
+      context.setLineDash([3, 4]);
+      line(x(from), y(ml.threshold), width - 16, y(ml.threshold), "#807868");
+      context.setLineDash([]);
+      for (const point of ml.points) {
+        if (point.novelty === null || point.end < from) continue;
+        const above = point.novelty >= ml.threshold;
+        context.lineWidth = above ? 2 : 1;
+        const at = x(point.end);
+        line(at, base, at, y(point.novelty), above ? mlColor : "#a49472");
+        context.fillStyle = above ? mlColor : "#a49472";
+        context.fillRect(at - 1, y(point.novelty) - 1, above ? 4 : 2, above ? 4 : 2);
+      }
+      for (const cue of ml.persistence.cues) {
+        const at = x(cue.time);
+        context.strokeStyle = mlColor;
+        context.fillStyle = mlColor;
+        context.beginPath();
+        context.arc(at, mlTop + 7, 3, 0, Math.PI * 2);
+        if (cue.confirmedAt === null) context.stroke();
+        else context.fill();
+      }
+      context.lineWidth = 1;
+    }
+
     drawLabLanes(context, rows, frames ?? [], x);
     if (eventLane) {
       for (const mark of events.filter(event => event.kind === "event")) {
@@ -194,6 +227,11 @@ export function Score({ map, selected, select, timbreScale, smoothing, lanes, re
     for (const mark of events.filter(event => event.kind === "timbre")) {
       const chosen = selected?.id === mark.id;
       line(x(mark.start), contourTop, x(mark.start), 302, chosen ? markerColor : "#bd8c81");
+    }
+    if (mlCueTime !== undefined) {
+      context.setLineDash([2, 4]);
+      line(x(mlCueTime), contourTop, x(mlCueTime), mlTop + mlHeight, mlColor);
+      context.setLineDash([]);
     }
     if (last > 0) {
       line(x(last), top, x(last), timelineBottom, markerColor);
@@ -212,6 +250,9 @@ export function Score({ map, selected, select, timbreScale, smoothing, lanes, re
           {hz >= 1000 ? `${(hz / 1000).toFixed(2).replace(/\.?0+$/, "")} kHz` : `${hz} Hz`}
         </span>;
       })}
+      {ml && <span className="lab-lane-name ml-lane" style={{ top: mlTop + mlHeight / 2 }}>
+        <i style={{ background: mlColor }} />ML texture
+      </span>}
       {rows.map(row => <span className="lab-lane-name" key={row.id} style={{ top: row.top + row.height / 2 }}>
         <i style={{ background: row.color }} />{row.label}
       </span>)}

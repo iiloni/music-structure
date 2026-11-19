@@ -2,7 +2,7 @@ namespace MusicStructure;
 
 static class Fixtures
 {
-    public static readonly string[] Names = ["return", "gain", "gap", "lanes", "refinement", "chords"];
+    public static readonly string[] Names = ["return", "gain", "gap", "lanes", "refinement", "chords", "ml"];
     public const int BlockFrames = Packet.Rate / 20;
     static readonly int[][] Return =
     [
@@ -28,6 +28,7 @@ static class Fixtures
 
     public static IEnumerable<Packet> Packets(string name)
     {
+        if (name == "ml") return MlStudy.Packets();
         if (name == "chords") return ChordStudy();
         if (name == "lanes") return LaneStudy();
         if (name == "refinement") return RefinementStudy();

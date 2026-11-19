@@ -10,9 +10,11 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using MusicStructure;
 
 if (args is ["--verify"]) return Verification.Run();
+if (args is ["--verify-ml"]) return MlVerification.Run(Musicnn.ModelPath);
+if (args is ["--verify-ml", string path]) return MlVerification.Run(path);
 if (args.Any(arg => arg is not ("--no-open" or "--demo")))
 {
-    Console.Error.WriteLine("Usage: MusicStructure [--no-open] [--demo] | --verify");
+    Console.Error.WriteLine("Usage: MusicStructure [--no-open] [--demo] | --verify | --verify-ml [model-path]");
     return 2;
 }
 
@@ -77,7 +79,7 @@ app.MapGet("/session", async context =>
             return;
         }
         try { session.Refresh(); }
-        catch (Exception ex) { session.Notice($"Could not list Spotify sources. {ex.Message}"); }
+        catch (Exception ex) { session.Notice($"Could not list playback sources. {ex.Message}"); }
         await Wire.Run(socket, session, lifetime);
     }
     catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or JsonException)

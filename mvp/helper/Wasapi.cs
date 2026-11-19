@@ -6,7 +6,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace MusicStructure;
 
-record Source(int Pid, [property: System.Text.Json.Serialization.JsonConverter(typeof(TickString))] long Started, string Label);
+record Source(int Pid, [property: System.Text.Json.Serialization.JsonConverter(typeof(TickString))] long Started, string Label, string Kind, string ProcessName);
 
 [SupportedOSPlatform("windows10.0.22000")]
 static class Wasapi
@@ -15,19 +15,24 @@ static class Wasapi
     {
         using var current = Process.GetCurrentProcess();
         int session = current.SessionId;
-        var spotify = new Dictionary<int, long>();
-        foreach (var process in Process.GetProcessesByName("Spotify"))
+        var sources = new Dictionary<int, Source>();
+        foreach (var (processName, label, kind) in new[] { ("Spotify", "Spotify desktop", "spotify"), ("vlc", "VLC", "local") })
         {
-            using (process)
+            foreach (var process in Process.GetProcessesByName(processName))
             {
-                try
+                using (process)
                 {
-                    if (process.SessionId == session) spotify[process.Id] = process.StartTime.ToUniversalTime().Ticks;
+                    try
+                    {
+                        if (process.SessionId == session)
+                            sources[process.Id] = new Source(process.Id, process.StartTime.ToUniversalTime().Ticks,
+                                $"{label} (PID {process.Id})", kind, processName);
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { }
                 }
-                catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { }
             }
         }
-        if (spotify.Count == 0) return [];
+        if (sources.Count == 0) return [];
 
         using var snapshot = CreateToolhelp32Snapshot(2, 0);
         if (snapshot.IsInvalid) throw new Win32Exception(Marshal.GetLastPInvokeError());
@@ -36,11 +41,12 @@ static class Wasapi
         var roots = new List<Source>();
         do
         {
-            if (!spotify.TryGetValue(entry.Pid, out long started)) continue;
-            if (spotify.TryGetValue(entry.Parent, out long parentStarted) && parentStarted <= started) continue;
-            roots.Add(new Source(entry.Pid, started, $"Spotify desktop (PID {entry.Pid})"));
+            if (!sources.TryGetValue(entry.Pid, out Source? source)) continue;
+            if (sources.TryGetValue(entry.Parent, out Source? parent) && parent.Kind == source.Kind &&
+                parent.Started <= source.Started) continue;
+            roots.Add(source);
         } while (Process32Next(snapshot, ref entry));
-        return roots.OrderBy(s => s.Started).ToArray();
+        return roots.OrderBy(s => s.Kind == "local").ThenBy(s => s.Started).ToArray();
     }
 
     public static void Capture(Source source, Action<Packet> enqueue, CancellationToken stop)
@@ -133,8 +139,8 @@ static class Wasapi
     static void VerifyTarget(Process target, SafeProcessHandle identity, Source source)
     {
         if (WaitForSingleObject(identity, 0) != 258 || target.StartTime.ToUniversalTime().Ticks != source.Started ||
-            !string.Equals(target.ProcessName, "Spotify", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Spotify closed or restarted. Refresh sources and start again.");
+            !string.Equals(target.ProcessName, source.ProcessName, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The selected player closed or restarted. Refresh sources and start again.");
     }
 
     static IAudioClient Activate(int pid, CancellationToken stop)

@@ -2,13 +2,14 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource/instrument-serif/latin-400.css";
 import "@fontsource-variable/instrument-sans/wght.css";
+import { PersistenceReview } from "./PersistenceReview";
 import { Score, markName, time } from "./Score";
 import { laneDefinitions, type Lane } from "./LabLanes";
 import { timbreWindows, type TimbreScale, type TimbreWindow } from "./timbre";
 import { useHelper, type Mark } from "./wire";
 import "./style.css";
 
-const fixtures = { return: "A–B–A study", gain: "Gain step", gap: "Interrupted listen", lanes: "Pulse and harmony", refinement: "Three returns", chords: "Chord voicings" };
+const fixtures = { return: "A–B–A study", gain: "Gain step", gap: "Interrupted listen", lanes: "Pulse and harmony", refinement: "Three returns", chords: "Chord voicings", ml: "ML texture control" };
 type Fixture = keyof typeof fixtures;
 type PaintReading = { index: number; ms: number | null; timestampToPacketReadMs: number | null; afterPacketReadMs: number | null; error: number };
 const active = new Set(["waiting", "capturing", "loading", "stopping"]);
@@ -24,6 +25,8 @@ function markTimes(mark: Mark) {
 
 function App() {
   const { map, online, connection, send, alignment } = useHelper();
+  const [mlSelection, setMlSelection] = useState<{ session?: string; id?: number }>();
+  const [mlOptIn, setMlOptIn] = useState(false);
   const [chosenSource, chooseSource] = useState<number>();
   const [timbreScale, setTimbreScale] = useState<TimbreScale>("fixed");
   const [smoothing, setSmoothing] = useState<TimbreWindow>(1);
@@ -46,10 +49,13 @@ function App() {
   const visibleMarks = scoreMap?.marks.filter(mark => mark.kind !== "event" || visibleLanes.includes("event"));
   const selected = visibleMarks?.find(mark => selection?.session === map?.sessionId && mark.id === selection?.id);
   const source = map?.sources.find(item => item.pid === chosenSource) ?? map?.sources[0];
+  const pinnedMl = mlSelection?.session === map?.sessionId ? mlSelection?.id : undefined;
+  const cueTime = map?.ml?.persistence.cues.find(cue => cue.id === pinnedMl)?.time;
   const running = online && active.has(map?.state ?? "");
   const canRefine = online && Boolean(map?.frames.length) && (map?.state === "stopped" || map?.state === "unavailable");
-  const capturingSpotify = running && map?.mode === "spotify" && map.state !== "stopping";
-  const title = map?.mode && map.mode !== "spotify" && map.source
+  const player = map?.mode === "spotify" || map?.mode === "local";
+  const capturingPlayer = running && player && map.state !== "stopping";
+  const title = !player && map?.mode && map.source
     ? fixtures[map.source as Fixture] : "Listening score";
   const currentState = !online ? "Offline" : map?.state === "capturing" ? "Receiving audio" :
     map?.state === "waiting" ? "Waiting for audio" : map?.state === "loading" ? "Opening replay" :
@@ -98,12 +104,12 @@ function App() {
     const readings = latency.current.readings;
     const sorted = readings.map(reading => reading.ms).filter(ms => ms !== null).sort((a, b) => a - b);
     const summary = {
-      version: map.version, analysisVersion: map.analysisVersion, sessionId: map.sessionId, refinement: map.refined,
+      version: map.version, analysisVersion: map.analysisVersion, sessionId: map.sessionId, refinement: map.refined, ml: map.ml,
       exportedAt: new Date().toISOString(),
       setup: {
         notes: setup, browser: navigator.userAgent, logicalCores: navigator.hardwareConcurrency,
         source: map.source, mode: map.mode, format: "44.1 kHz stereo PCM16", analysisRateHz: 22050,
-        timbreScale, smooth: smoothing > 0, timbreSmoothingSeconds: smoothing, clock: "elapsed since capture", isolation: map.mode === "spotify" ? "process tree" : null,
+        timbreScale, smooth: smoothing > 0, timbreSmoothingSeconds: smoothing, clock: "elapsed since capture", isolation: player ? "process tree" : null,
       },
       state: map.state, status: map.status, elapsed: map.elapsed, historyStart: map.historyStart,
       counters: map.counters, frames: map.frames, marks: map.marks,
@@ -123,7 +129,7 @@ function App() {
 
   function openFixture(mode: "replay" | "fixture") {
     if (fixture === "lanes" || fixture === "chords") setLabOpen(true);
-    send({ action: "start", mode, fixture });
+    send({ action: "start", mode, fixture, ml: fixture === "ml" && mode === "fixture" });
   }
 
   function compare(useRefined: boolean) {
@@ -147,6 +153,7 @@ function App() {
       <section className="heading" aria-labelledby="title">
         <div>
           <div className="mode">{map?.mode === "spotify" ? "Isolated Spotify audio" :
+            map?.mode === "local" ? "Isolated VLC audio" :
             map?.mode === "fixture" ? "Generated audio running in real time" :
             map?.mode === "replay" ? "Generated fixture replay" : "Local listening companion"}</div>
           <h1 id="title">{title}</h1>
@@ -158,23 +165,30 @@ function App() {
         <div className="source-controls">
           <label className="field"><span>Source</span>
             <select aria-label="Playback source" value={source?.pid ?? ""} disabled={!source || running}
-              onChange={event => chooseSource(Number(event.target.value))}>
-              {!source && <option value="">{map?.windowsCapture ? "No Spotify process found" : "Spotify capture requires Windows 11"}</option>}
+              onChange={event => {
+                chooseSource(Number(event.target.value));
+                setMlOptIn(false);
+              }}>
+              {!source && <option value="">{map?.windowsCapture ? "Open Spotify or VLC" : "Player capture requires Windows 11"}</option>}
               {map?.sources.map(item => <option key={item.pid} value={item.pid}>{item.label}</option>)}
             </select>
           </label>
           <button className="quiet icon-button" type="button" disabled={!online || running || !map?.windowsCapture}
-            aria-label="Refresh Spotify sources" title="Refresh Spotify sources" onClick={() => send({ action: "sources" })}>↻</button>
+            aria-label="Refresh playback sources" title="Refresh playback sources" onClick={() => send({ action: "sources" })}>↻</button>
         </div>
         <div className="capture-controls">
-          <button type="button" className="quiet" disabled={!capturingSpotify} onClick={() => send({ action: "new" })}>New listen</button>
+          <button type="button" className="quiet" disabled={!capturingPlayer} onClick={() => send({ action: "new" })}>New listen</button>
           {running ? <button className="primary" type="button" disabled={map?.state === "stopping"}
             onClick={() => send({ action: "stop" })}><i className="stop-glyph"/>Stop</button> :
             <button className="primary" type="button" disabled={!online || !source || map?.refining}
-              onClick={() => source && send({ action: "start", mode: "spotify", pid: source.pid, started: source.started })}>
-              <i className="record-glyph"/>{map?.mode === "spotify" ? "Resume capture" : "Start capture"}
+              onClick={() => source && send({ action: "start", mode: source.kind, pid: source.pid, started: source.started, ml: source.kind === "local" && mlOptIn })}>
+              <i className="record-glyph"/>{map?.mode === "spotify" && source?.kind === "spotify" ? "Resume capture" : "Start capture"}
             </button>}
         </div>
+        {source?.kind === "local" && <label className="ml-opt-in">
+          <input type="checkbox" checked={mlOptIn} onChange={event => setMlOptIn(event.target.checked)} disabled={running} />
+          <span>Experimental ML texture<small>Original or licensed local music</small></span>
+        </label>}
         <div className="meter">
           <div><span>Input level</span><strong>{rms == null ? "—" : `${rms.toFixed(0)} dBFS`}</strong></div>
           <meter min="0" max="1" value={meter} aria-label="Input level"/>
@@ -225,7 +239,16 @@ function App() {
           </div>
         </div>
         <Score map={scoreMap} selected={selected} select={select} timbreScale={timbreScale}
-          smoothing={smoothing} lanes={visibleLanes} refined={viewingRefined}/>
+          smoothing={smoothing} lanes={visibleLanes} refined={viewingRefined} mlCueTime={cueTime}/>
+        {map?.ml && <>
+          <div className="ml-status">
+            <span aria-live="polite">{map.ml.detail}</span>
+            {map.ml.points.length > 0 && <span>{map.ml.points.at(-1)?.inferenceMs.toFixed(1)} ms CPU inference
+              {map.ml.droppedPackets > 0 && ` · ${map.ml.droppedPackets} buffered packets dropped`}</span>}
+          </div>
+          {map.ml.state !== "unavailable" && <PersistenceReview key={map.sessionId} report={map.ml.persistence} selection={pinnedMl}
+            choose={id => setMlSelection({ session: map.sessionId, id })}/>}
+        </>}
         <div className="score-footer">
           <span title={map?.status}>{connection || map?.status}</span>
           <span>{map?.counters.features ?? 0} feature frames</span>
@@ -271,10 +294,10 @@ function App() {
               {Object.entries(fixtures).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
             </select>
           </label>
-          <button type="button" className="quiet" disabled={!online || running || map?.refining}
+          <button type="button" className="quiet" disabled={!online || running || map?.refining || fixture === "ml"}
             onClick={() => openFixture("replay")}>Open replay</button>
           <button type="button" className="quiet" disabled={!online || running || map?.refining}
-            onClick={() => openFixture("fixture")}>Run in real time</button>
+            onClick={() => openFixture("fixture")}>{fixture === "ml" ? "Run ML control" : "Run in real time"}</button>
         </div>
         <details onToggle={event => {
           setShowTiming(event.currentTarget.open);
