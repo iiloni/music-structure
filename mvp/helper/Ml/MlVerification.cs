@@ -7,6 +7,7 @@ static class MlVerification
         try
         {
             VerifyPreprocessing();
+            VerifyUnchangedReturnAndNewListen();
             Require(Session.AllowsMl("spotify", null) && !Session.AllowsMl("replay", "ml") &&
                 Session.AllowsMl("local", null) && Session.AllowsMl("fixture", "ml"), "Unexpected ML source authorization.");
             double loadStart = Clock.Milliseconds;
@@ -24,7 +25,8 @@ static class MlVerification
                     points.Add(point);
                     persistence.Embedding(point, embedding);
                 }
-                else if (state == "silence") persistence.Interrupt(currentTime, "Silence.");
+                else if (state == "silence") persistence.Pause(currentTime, "silence", "Silence.");
+                else if (state == "warmup") persistence.Pause(currentTime, "gap", "The analysis window was interrupted.");
             });
             var legacy = new Listen(0, "replay", "ml");
             int generation = 0;
@@ -39,7 +41,7 @@ static class MlVerification
                     if (!gapOpen)
                     {
                         generation++;
-                        persistence.Interrupt(MlStudy.Gap, "Capture gap.");
+                        persistence.Pause(MlStudy.Gap, "gap", "Capture gap.");
                     }
                     gapOpen = true;
                     continue;
@@ -72,10 +74,10 @@ static class MlVerification
             ReportCue("gain-only step", MlStudy.Gain, MlStudy.Layer, points);
             ReportCue("gradual layering", MlStudy.Layer, MlStudy.Quiet, points);
             var review = persistence.Read(0);
-            CheckPersistence(points, review);
-            CheckLaneScale(points, persistence, review);
             foreach (var cue in review.Cues)
-                Console.WriteLine($"A/B {cue.Time:F3}s -> {cue.ConfirmedAt:F3}s: A {cue.Spectrum}, B {cue.Embedding}; normalized onset {cue.SpectrumDistance:F2}/{cue.EmbeddingDistance:F2}. {cue.Reason}");
+                Console.WriteLine($"A/B {cue.Time:F3}s -> {cue.ConfirmedAt:F3}s: A {cue.Spectrum}, B {cue.Embedding}; normalized onset {cue.SpectrumDistance:F2}/{cue.EmbeddingDistance:F2}. {cue.AfterBreak} {cue.Reason}");
+            CheckPersistence(points, review);
+            CheckLaneScale(points.Select(persistence.WithLaneScores).ToArray(), review);
             Console.WriteLine($"A/B extra work: {review.ProcessingMs:F3} ms over {review.Comparisons} paired hops.");
             var steady = points.Skip(1).ToArray();
             Console.WriteLine($"Accelerated fixture, excluding first patch: input p50/p95 {Percentile(steady.Select(p => p.InputMs), .5):F1}/{Percentile(steady.Select(p => p.InputMs), .95):F1} ms; CPU inference p50/p95 {Percentile(steady.Select(p => p.InferenceMs), .5):F1}/{Percentile(steady.Select(p => p.InferenceMs), .95):F1} ms.");
@@ -102,47 +104,92 @@ static class MlVerification
         Console.WriteLine($"Backlog stress: dropped {result.DroppedPackets} packets; no embedding from silence.");
     }
 
-    static void CheckLaneScale(List<MlPoint> points, Persistence persistence, PersistenceReport review)
+    static void CheckLaneScale(MlPoint[] points, PersistenceReport review)
     {
         // The lane draws novelty / scale, so its line must agree with how candidates are nominated.
-        var scaled = points.Where(p => p.Novelty is not null && persistence.ScaleAt(p) is not null).ToArray();
-        Require(scaled.Length >= points.Count(p => p.Novelty is not null) - 4, "Too many compared hops lack a lane scale.");
+        var scaled = points.Where(p => p.SpectrumScore is not null && p.EmbeddingScore is not null).ToArray();
+        Require(scaled.Length >= points.Count(p => p.Novelty is not null) - 4, "Too many compared hops lack lane scores.");
         foreach (var cue in review.Cues)
         {
             var at = points.Single(p => Math.Abs(p.End - cue.Time) < .001);
-            Require(persistence.ScaleAt(at) is not null, $"The candidate at {cue.Time:F3}s has no lane scale.");
+            Require(at.SpectrumScore >= 1 || at.EmbeddingScore >= 1, $"The candidate at {cue.Time:F3}s has no above-threshold lane score.");
         }
-        double steady = points.Where(p => p.End > 4 && p.End < MlStudy.Fill && persistence.ScaleAt(p) is not null)
-            .Max(p => p.Novelty!.Value / persistence.ScaleAt(p)!.Value);
-        double fill = points.Where(p => p.End > MlStudy.Fill && p.End < MlStudy.Fill + 2 && persistence.ScaleAt(p) is not null)
-            .Max(p => p.Novelty!.Value / persistence.ScaleAt(p)!.Value);
-        Require(steady < 1 && fill >= 1, $"Relative lane missed the fill (steady {steady:F2}, fill {fill:F2}).");
-        Console.WriteLine($"Relative ML lane: {scaled.Length} scaled hops; steady peak {steady:F2}×, fill peak {fill:F2}×.");
+        foreach (var (name, score) in new (string, Func<MlPoint, double?>)[] { ("Spectrum", p => p.SpectrumScore), ("MusiCNN", p => p.EmbeddingScore) })
+        {
+            double? steady = scaled.Where(p => p.End > 4 && p.End < MlStudy.Fill).Max(score);
+            double? fill = scaled.Where(p => p.End > MlStudy.Fill && p.End < MlStudy.Fill + 2).Max(score);
+            Require(steady < 1 && fill >= 1, $"{name} lane missed the fill (steady {steady:F2}, fill {fill:F2}).");
+            Console.WriteLine($"{name} lane: {scaled.Length} scaled hops; steady peak {steady:F2}×, fill peak {fill:F2}×.");
+        }
     }
 
     static void CheckPersistence(List<MlPoint> points, PersistenceReport review)
     {
-        Require(review.Cues.Length == 4, "Expected four common candidates, including the gain transient and interrupted onset.");
-        var expected = new[] { (MlStudy.Fill, "brief", "brief"), (MlStudy.Swap, "lasting", "lasting"),
-            (MlStudy.Gain, "uncertain", "brief"), (MlStudy.BeforeGap, "uncertain", "uncertain") };
+        (double Onset, string A, string B, string? Break)[] expected =
+        [
+            (MlStudy.Fill, "brief", "brief", null),
+            (MlStudy.Swap, "lasting", "lasting", null),
+            (MlStudy.Gain, "uncertain", "brief", null),
+            (MlStudy.Resume, "lasting", "lasting", "silence"),
+            (MlStudy.BeforeGap, "uncertain", "uncertain", null),
+            (MlStudy.AfterGap, "lasting", "lasting", "gap")
+        ];
+        Require(review.Cues.Length == expected.Length, $"Expected six common candidates, got {review.Cues.Length}.");
         for (int i = 0; i < expected.Length; i++)
         {
             var cue = review.Cues[i];
-            var (onset, a, b) = expected[i];
-            Require(cue.Time - onset is >= 0 and <= 2 && cue.Spectrum == a && cue.Embedding == b,
+            var (onset, a, b, resumed) = expected[i];
+            Require(cue.AfterBreak == resumed && cue.Spectrum == a && cue.Embedding == b,
                 $"Shared cue at {onset}s gave {cue.Spectrum}/{cue.Embedding}.");
+            if (resumed is null)
+                Require(cue.Time - onset is >= 0 and <= 2, $"Cue at {onset}s missed its onset.");
+            else
+            {
+                var first = points.First(point => point.Start >= onset - .001);
+                double breakStart = resumed == "silence" ? MlStudy.Quiet : MlStudy.Gap;
+                Require(cue.Time == first.End && cue.ReferenceEnd <= breakStart,
+                    $"The return at {onset}s did not use the first fresh window and pre-break reference.");
+            }
             Require(cue.ReferenceEnd < cue.Time && cue.ReferenceStart < cue.ReferenceEnd,
                 "A confirmation reference included a later observation.");
-            if (i < expected.Length - 1)
+            if (onset != MlStudy.BeforeGap)
                 Require(Math.Abs(cue.ConfirmedAt!.Value - cue.Time - Persistence.Horizon) < .001,
                     "A verdict missed the common confirmation horizon.");
+            else
+                Require(cue.ConfirmedAt is <= MlStudy.Gap && cue.Reason == "Capture gap.",
+                    "The comparison confirmed across a capture gap.");
         }
-        var gapCue = review.Cues[^1];
-        Require(gapCue.ConfirmedAt is <= MlStudy.Gap && gapCue.Reason == "Capture gap.",
-            "The comparison confirmed across a capture gap.");
         var layer = points.Where(p => p.End > MlStudy.Layer && p.End < MlStudy.Quiet).Max(p => p.Novelty);
         var steady = points.Where(p => p.End > 4 && p.End < MlStudy.Fill).Max(p => p.Novelty);
         Require(layer >= 3 * steady && layer < MlTexture.Threshold, "The gradual layer control did not yield a small visible response.");
+    }
+
+    static void VerifyUnchangedReturnAndNewListen()
+    {
+        var persistence = new Persistence();
+        Feed(0, 0, 0, [1, 0]);
+        persistence.Pause(5, "gap", "Capture gap.");
+        var returned = Feed(8, 1, 0, [1, 0]);
+        Require(returned.SpectrumScore == 0 && returned.EmbeddingScore == 0 && persistence.Read(0).Cues.Length == 0,
+            "The detector skipped comparison or nominated an unchanged return.");
+
+        persistence.Pause(13, "gap", "Capture gap.");
+        persistence.Clear();
+        var restarted = Feed(0, 2, 10, [0, 1]);
+        Require(restarted.SpectrumScore is null && restarted.EmbeddingScore is null && persistence.Read(0).Cues.Length == 0,
+            "The detector reused a reference from a previous listen.");
+
+        MlPoint Feed(double start, int run, double mel, float[] embedding)
+        {
+            for (int bin = 1; bin <= 20; bin++)
+            {
+                double end = start + bin * .25;
+                persistence.Feature(new Feature((long)(end * 4), end - .25, end, null, run, -20, 2000, true, true, [mel], []));
+                if (bin >= 12 && bin % 4 == 0)
+                    persistence.Embedding(new MlPoint(end - 3, end, run, null, 0, 0, null), embedding);
+            }
+            return persistence.WithLaneScores(new MlPoint(start, start + 3, run, null, 0, 0, null));
+        }
     }
 
     static void VerifyPreprocessing()

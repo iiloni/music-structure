@@ -3,7 +3,7 @@ namespace MusicStructure;
 static class MlStudy
 {
     public const double Fill = 8, Swap = 16, Gain = 26, Layer = 36, Quiet = 45, Resume = 49,
-        BeforeGap = 55, Gap = 57, AfterGap = 60, Duration = 68;
+        BeforeGap = 58, Gap = 60, AfterGap = 63, Duration = 72;
     static readonly double[] Fundamental = [220, 261.625565, 329.627557];
     // Different harmonic envelopes with the same amplitude-weighted harmonic centroid.
     static readonly (int Harmonic, double Weight)[] First = [(1, 1), (4, .7), (7, .6)];

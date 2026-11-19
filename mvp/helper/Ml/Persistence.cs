@@ -1,7 +1,8 @@
 namespace MusicStructure;
 
 record PersistenceCue(int Id, double Time, double ReferenceStart, double ReferenceEnd, double DueAt,
-    string Spectrum, string Embedding, double? ConfirmedAt, string? Reason, double SpectrumDistance, double EmbeddingDistance);
+    string Spectrum, string Embedding, double? ConfirmedAt, string? Reason, double SpectrumDistance, double EmbeddingDistance,
+    string? AfterBreak);
 record PersistenceReport(double HorizonSeconds, int Comparisons, double ProcessingMs, PersistenceCue[] Cues);
 
 sealed class Persistence
@@ -12,18 +13,26 @@ sealed class Persistence
     readonly Queue<(MlPoint Point, float[] Embedding)> pending = new();
     readonly Queue<Comparison> recent = new();
     readonly Queue<PersistenceCue> decisions = new();
-    // The embedding scale each compared hop was judged against, keyed by run and window end,
-    // so the lane can draw novelty relative to the same adaptive threshold that nominates cues.
-    readonly Queue<(int Run, double End)> scaleOrder = new();
-    readonly Dictionary<(int Run, double End), double> scales = new();
-    double? lastScale;
+    readonly Queue<(int Run, double End)> laneOrder = new();
+    readonly Dictionary<(int Run, double End), (Thresholds Scale, double A, double B)> laneScores = new();
+    Thresholds? lastScale;
+    Baseline? lastReference;
+    string? afterBreak;
     Comparison? previous;
     ActiveCue? active;
     int comparisons, nextId;
     double computeMs;
 
     record Comparison(MlPoint Point, double[] Spectrum, float[] Embedding, double SpectrumStep, double EmbeddingStep);
-    sealed record ActiveCue(PersistenceCue Cue, Comparison[] Reference, double SpectrumScale, double EmbeddingScale)
+    readonly record struct Thresholds(double Spectrum, double Embedding);
+    sealed record Baseline(Comparison[] Hops, Thresholds Scale)
+    {
+        public (double A, double B) DistanceFrom(Comparison point) =>
+            (Hops.Average(p => SpectralDistance(point.Spectrum, p.Spectrum)) / Scale.Spectrum,
+             Hops.Average(p => EmbeddingDistance(point.Embedding, p.Embedding)) / Scale.Embedding);
+    }
+
+    sealed record ActiveCue(PersistenceCue Cue, Baseline Reference)
     {
         public List<(double A, double B)> Followup { get; } = [];
     }
@@ -57,7 +66,7 @@ sealed class Persistence
             if (window.Length < 10 || window.Any(f => !f.Valid || !f.Audible || f.Segment != window[0].Segment)
                 || window[^1].Index - window[0].Index != window.Length - 1)
             {
-                Interrupt(next.Point.End, "Insufficient comparable audio.");
+                Interrupt(next.Point.End, "Insufficient comparable audio.", clearPending: false);
                 continue;
             }
             var spectrum = new double[window[0].Mel.Length];
@@ -72,17 +81,17 @@ sealed class Persistence
     void Compare(MlPoint point, double[] spectrum, float[] embedding)
     {
         if (previous is { } prior && (point.Run != prior.Point.Run || point.End - prior.Point.End > 1.01))
-            Interrupt(point.End, "The analysis window was interrupted.", clearPending: false);
+            Pause(point.End, "gap", "The analysis window was interrupted.", clearPending: false);
         double a = previous is null ? 0 : SpectralDistance(spectrum, previous.Spectrum);
         double b = previous is null ? 0 : EmbeddingDistance(embedding, previous.Embedding);
         var current = new Comparison(point, spectrum, embedding, a, b);
         comparisons++;
-        double? scale = active?.EmbeddingScale;
+        Thresholds? scale = active?.Reference.Scale;
+        (double A, double B)? scores = null;
 
         if (active is { } cue)
         {
-            var (distanceA, distanceB) = Distances(current, cue.Reference, cue.SpectrumScale, cue.EmbeddingScale);
-            cue.Followup.Add((distanceA, distanceB));
+            cue.Followup.Add(cue.Reference.DistanceFrom(current));
             if (point.End >= cue.Cue.DueAt - .001)
             {
                 string aLabel = Decide(cue.Followup.Select(x => x.A).ToArray(), cue.Cue.SpectrumDistance);
@@ -92,39 +101,62 @@ sealed class Persistence
                 recent.Clear();
             }
         }
+        else if (afterBreak is { } resumed)
+        {
+            afterBreak = null;
+            if (lastReference is { } reference)
+            {
+                scale = reference.Scale;
+                scores = reference.DistanceFrom(current);
+                if (scores.Value.A >= 1 || scores.Value.B >= 1)
+                    Nominate(point, reference, scores.Value, resumed);
+            }
+            lastReference = null;
+        }
         else if (recent.Count >= ReferenceHops)
         {
-            double scaleA = Scale(recent.Select(point => point.SpectrumStep), 1.5);
-            double scaleB = Scale(recent.Select(point => point.EmbeddingStep), MlTexture.Threshold);
-            scale = lastScale = scaleB;
+            scale = lastScale = AdaptiveScale();
             // Either representation may nominate the shared timestamp. Freeze both references
             // and scales at that time so neither decision gets later baseline information.
-            if (a >= scaleA || b >= scaleB)
+            if (a >= scale.Value.Spectrum || b >= scale.Value.Embedding)
             {
-                var reference = recent.TakeLast(ReferenceHops).ToArray();
-                var (distanceA, distanceB) = Distances(current, reference, scaleA, scaleB);
-                var candidate = new PersistenceCue(++nextId, point.End, reference[0].Point.End,
-                    reference[^1].Point.End, point.End + Horizon, "provisional", "provisional",
-                    null, null, distanceA, distanceB);
-                active = new ActiveCue(candidate, reference, scaleA, scaleB);
+                var reference = new Baseline(recent.TakeLast(ReferenceHops).ToArray(), scale.Value);
+                Nominate(point, reference, reference.DistanceFrom(current), null);
             }
         }
 
         // Right after a reset or decision the baseline is still refilling; reuse the last scale.
-        if ((scale ?? lastScale) is double judged && previous is not null) RecordScale(point, judged);
+        if ((scale ?? lastScale) is { } judged)
+        {
+            if (scores is { } returned) RecordLane(point, judged, returned.A, returned.B);
+            else if (previous is not null) RecordLane(point, judged, a / judged.Spectrum, b / judged.Embedding);
+        }
+        var priorHop = previous;
         previous = current;
         if (recent.Count >= 8) recent.Dequeue();
         recent.Enqueue(current);
+        if (priorHop is not null)
+            lastReference = new Baseline([priorHop, current], scale ?? AdaptiveScale());
     }
 
-    void RecordScale(MlPoint point, double scale)
+    void Nominate(MlPoint point, Baseline reference, (double A, double B) distance, string? resumed)
     {
-        if (scaleOrder.Count >= 601) scales.Remove(scaleOrder.Dequeue());
-        scaleOrder.Enqueue((point.Run, point.End));
-        scales[(point.Run, point.End)] = scale;
+        var candidate = new PersistenceCue(++nextId, point.End, reference.Hops[0].Point.End,
+            reference.Hops[^1].Point.End, point.End + Horizon, "provisional", "provisional",
+            null, null, distance.A, distance.B, resumed);
+        active = new ActiveCue(candidate, reference);
     }
 
-    public double? ScaleAt(MlPoint point) => scales.TryGetValue((point.Run, point.End), out var scale) ? scale : null;
+    void RecordLane(MlPoint point, Thresholds scale, double a, double b)
+    {
+        if (laneOrder.Count >= 601) laneScores.Remove(laneOrder.Dequeue());
+        laneOrder.Enqueue((point.Run, point.End));
+        laneScores[(point.Run, point.End)] = (scale, a, b);
+    }
+
+    public MlPoint WithLaneScores(MlPoint point) => laneScores.TryGetValue((point.Run, point.End), out var scores)
+        ? point with { Scale = scores.Scale.Embedding, SpectrumScore = scores.A, EmbeddingScore = scores.B }
+        : point;
 
     static string Decide(double[] followup, double initial)
     {
@@ -141,9 +173,8 @@ sealed class Persistence
         return Math.Max(floor, 3 * sorted[sorted.Length / 2]);
     }
 
-    static (double A, double B) Distances(Comparison point, Comparison[] reference, double a, double b) =>
-        (reference.Average(p => SpectralDistance(point.Spectrum, p.Spectrum)) / a,
-         reference.Average(p => EmbeddingDistance(point.Embedding, p.Embedding)) / b);
+    Thresholds AdaptiveScale() => new(Scale(recent.Select(hop => hop.SpectrumStep), 1.5),
+        Scale(recent.Select(hop => hop.EmbeddingStep), MlTexture.Threshold));
 
     static double SpectralDistance(double[] a, double[] b)
     {
@@ -175,14 +206,24 @@ sealed class Persistence
         recent.Clear();
     }
 
+    public void Pause(double time, string kind, string reason, bool clearPending = true)
+    {
+        // Silence may be followed by a warmup notification. Keep the original reason and reference
+        // until the first comparable window returns.
+        afterBreak ??= kind;
+        Interrupt(time, reason, clearPending);
+    }
+
     public void Clear()
     {
         Interrupt(0, "New listen.");
         frames.Clear();
         decisions.Clear();
-        scaleOrder.Clear();
-        scales.Clear();
+        laneOrder.Clear();
+        laneScores.Clear();
         lastScale = null;
+        lastReference = null;
+        afterBreak = null;
         nextId = comparisons = 0;
         computeMs = 0;
     }

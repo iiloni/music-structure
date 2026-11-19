@@ -196,7 +196,10 @@ meter::-webkit-meter-optimum-value { border-radius: 10px; background: #218264; }
   padding: 7px 20px; border-top: 1px solid #36446e; color: #ead6ab; font-size: .77rem;
 }
 .ml-lane i { margin-right: 4px; }
-@media (max-width: 680px) { .ml-status { padding-inline: 12px; } }
+@media (max-width: 680px) {
+  .ml-status { padding-inline: 12px; }
+  .plot-lanes .ml-lane { left: 5px; font-size: .7rem; }
+}
 
 .persistence {
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px;

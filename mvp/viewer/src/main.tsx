@@ -6,7 +6,7 @@ import { PersistenceReview } from "./PersistenceReview";
 import { Score, markName, time } from "./Score";
 import { laneDefinitions, type Lane } from "./LabLanes";
 import { timbreWindows, type TimbreScale, type TimbreWindow } from "./timbre";
-import { useHelper, type Mark } from "./wire";
+import { useHelper, type Mark, type TextureView } from "./wire";
 import "./style.css";
 
 const fixtures = { return: "A–B–A study", gain: "Gain step", gap: "Interrupted listen", lanes: "Pulse and harmony", refinement: "Three returns", chords: "Chord voicings", ml: "ML texture control" };
@@ -26,6 +26,7 @@ function markTimes(mark: Mark) {
 function App() {
   const { map, online, connection, send, alignment } = useHelper();
   const [mlSelection, setMlSelection] = useState<{ session?: string; id?: number }>();
+  const [textureView, setTextureView] = useState<TextureView>("spectrum");
   const [mlSource, setMlSource] = useState<string>();
   const [chosenSource, chooseSource] = useState<number>();
   const [timbreScale, setTimbreScale] = useState<TimbreScale>("fixed");
@@ -242,15 +243,15 @@ function App() {
           </div>
         </div>
         <Score map={scoreMap} selected={selected} select={select} timbreScale={timbreScale}
-          smoothing={smoothing} lanes={visibleLanes} refined={viewingRefined} mlCueTime={cueTime}/>
+          smoothing={smoothing} lanes={visibleLanes} refined={viewingRefined} mlCueTime={cueTime} textureView={textureView}/>
         {map?.ml && <>
           <div className="ml-status">
             <span aria-live="polite">{map.ml.detail}</span>
             {map.ml.points.length > 0 && <span>{map.ml.points.at(-1)?.inferenceMs.toFixed(1)} ms CPU inference
               {map.ml.droppedPackets > 0 && ` · ${map.ml.droppedPackets} buffered packets dropped`}</span>}
           </div>
-          {map.ml.state !== "unavailable" && <PersistenceReview key={map.sessionId} report={map.ml.persistence} selection={pinnedMl}
-            choose={id => setMlSelection({ session: map.sessionId, id })}/>}
+          {map.ml.state !== "unavailable" && <PersistenceReview report={map.ml.persistence} selection={pinnedMl}
+            choose={id => setMlSelection({ session: map.sessionId, id })} view={textureView} setView={setTextureView}/>}
         </>}
         <div className="score-footer">
           <span title={map?.status}>{connection || map?.status}</span>

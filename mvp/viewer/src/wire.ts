@@ -21,13 +21,18 @@ export interface MlPoint extends Passage {
   run: number; novelty: number | null; inputMs: number; inferenceMs: number; afterWindowMs: number | null;
   /** Adaptive MusiCNN threshold this hop was judged against; null until the baseline exists. */
   scale: number | null;
+  /** Distance in multiples of each representation's threshold. */
+  spectrumScore?: number | null;
+  embeddingScore?: number | null;
 }
+export type TextureView = "spectrum" | "embedding";
 export type PersistenceVerdict = "provisional" | "brief" | "lasting" | "uncertain";
 export interface PersistenceCue {
   id: number; time: number; referenceStart: number; referenceEnd: number; dueAt: number;
   spectrum: PersistenceVerdict; embedding: PersistenceVerdict;
   confirmedAt: number | null; reason: string | null;
   spectrumDistance: number; embeddingDistance: number;
+  afterBreak?: "silence" | "gap" | null;
 }
 export interface PersistenceReport {
   horizonSeconds: number; comparisons: number; processingMs: number; cues: PersistenceCue[];

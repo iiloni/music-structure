@@ -2,7 +2,8 @@ using System.Threading.Channels;
 
 namespace MusicStructure;
 
-record MlPoint(double Start, double End, int Run, double? Novelty, double InputMs, double InferenceMs, double? AfterWindowMs, double? Scale = null);
+record MlPoint(double Start, double End, int Run, double? Novelty, double InputMs, double InferenceMs, double? AfterWindowMs,
+    double? Scale = null, double? SpectrumScore = null, double? EmbeddingScore = null);
 record MlSnapshot(string State, string Detail, double Threshold, long DroppedPackets, MlPoint[] Points, PersistenceReport Persistence);
 record MlPacket(Packet Packet, double Start, int Generation);
 
@@ -142,7 +143,7 @@ sealed class MlPipeline
                 persistence.Clear();
                 Interlocked.Exchange(ref dropped, 0);
             }
-            else persistence.Interrupt(time, "Capture gap.");
+            else persistence.Pause(time, "gap", "Capture gap.");
             if (!unavailable)
             {
                 state = "warmup";
@@ -159,7 +160,7 @@ sealed class MlPipeline
             if (!snapshot && seen == revision) return null;
             seen = revision;
             return new MlSnapshot(state, detail, MlTexture.Threshold, Interlocked.Read(ref dropped),
-                points.Where(point => point.End >= from).Select(point => point with { Scale = persistence.ScaleAt(point) }).ToArray(),
+                points.Where(point => point.End >= from).Select(persistence.WithLaneScores).ToArray(),
                 persistence.Read(from));
         }
     }
@@ -197,8 +198,9 @@ sealed class MlPipeline
                         points.Enqueue(point);
                     }
                     if (state == next && detail == message && point is null) return;
-                    if (next == "silence" || next == "warmup" && point is null)
-                        persistence.Interrupt(workingTime, next == "silence" ? "Silence." : "The analysis window was interrupted.");
+                    if (next == "silence") persistence.Pause(workingTime, "silence", "Silence.");
+                    else if (next == "warmup" && point is null)
+                        persistence.Pause(workingTime, "gap", "The analysis window was interrupted.");
                     state = next;
                     detail = message;
                     revision++;

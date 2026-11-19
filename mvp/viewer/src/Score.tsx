@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Frame, MapState, Mark, Passage } from "./wire";
+import type { Frame, MapState, Mark, Passage, TextureView } from "./wire";
 import { drawLabLanes, laneDefinitions, type Lane, type LaneRow } from "./LabLanes";
 import { brightnessHz, brightnessRange, centeredBrightness, displayBrightness, type TimbreScale, type TimbreWindow } from "./timbre";
 
@@ -21,8 +21,9 @@ const mlHeight = 66;
 const ink = "#18264c", grid = "#36446e", faint = "#aab8d6";
 const top = 5, repeatBaseline = 123, contourTop = 163, contourBottom = 283;
 
-export function Score({ map, selected, select, timbreScale, smoothing, lanes, refined, mlCueTime }: {
+export function Score({ map, selected, select, timbreScale, smoothing, lanes, refined, mlCueTime, textureView }: {
   map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale; smoothing: TimbreWindow; lanes: readonly Lane[]; refined: boolean; mlCueTime?: number;
+  textureView: TextureView;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -30,6 +31,7 @@ export function Score({ map, selected, select, timbreScale, smoothing, lanes, re
   const [inspection, setInspection] = useState<{ session: string; seconds: number }>();
   const mlTop = 303;
   const ml = map?.ml;
+  const textureLabel = textureView === "spectrum" ? "Spectrum" : "MusiCNN";
   let timelineBottom = mlTop + (ml ? mlHeight : 0);
   const rows: LaneRow[] = [];
   for (const lane of laneDefinitions) {
@@ -184,8 +186,7 @@ export function Score({ map, selected, select, timbreScale, smoothing, lanes, re
     flush();
 
     if (ml) {
-      // Bars are novelty divided by the adaptive scale (3× the recent median step, floored at
-      // ml.threshold) that also nominates candidates, so crossing the line means "candidate-worthy".
+      // Both representations use the same vertical axis in multiples of their own thresholds.
       const base = mlTop + mlHeight - 8, ceiling = 3;
       const y = (relative: number) => base - Math.min(1, relative / ceiling) * (mlHeight - 17);
       for (const cue of ml.persistence.cues) {
@@ -198,15 +199,17 @@ export function Score({ map, selected, select, timbreScale, smoothing, lanes, re
       line(x(from), y(1), width - 16, y(1), "#807868");
       context.setLineDash([]);
       for (const point of ml.points) {
-        if (point.novelty === null || point.end < from) continue;
+        if (point.end < from) continue;
         const at = x(point.end);
-        if (point.scale === null) {
+        const relative = textureView === "spectrum" ? point.spectrumScore : point.embeddingScore ??
+          (point.novelty !== null && point.scale ? point.novelty / point.scale : null);
+        if (relative == null) {
           // Baseline not ready yet: mark the hop without implying a height.
           context.lineWidth = 1;
           line(at, base, at, base - 3, "#6f6a5e");
           continue;
         }
-        const relative = point.novelty / point.scale, above = relative >= 1;
+        const above = relative >= 1;
         context.lineWidth = above ? 2 : 1;
         line(at, base, at, y(relative), above ? mlColor : "#a49472");
         context.fillStyle = above ? mlColor : "#a49472";
@@ -263,8 +266,9 @@ export function Score({ map, selected, select, timbreScale, smoothing, lanes, re
           {hz >= 1000 ? `${(hz / 1000).toFixed(2).replace(/\.?0+$/, "")} kHz` : `${hz} Hz`}
         </span>;
       })}
-      {ml && <span className="lab-lane-name ml-lane" style={{ top: mlTop + mlHeight / 2 }}>
-        <i style={{ background: mlColor }} />ML texture
+      {ml && <span className="lab-lane-name ml-lane" style={{ top: mlTop + mlHeight / 2 }}
+        title={`${textureLabel} change in multiples of its threshold`}>
+        <i style={{ background: mlColor }} />{textureLabel}
       </span>}
       {rows.map(row => <span className="lab-lane-name" key={row.id} style={{ top: row.top + row.height / 2 }}>
         <i style={{ background: row.color }} />{row.label}
