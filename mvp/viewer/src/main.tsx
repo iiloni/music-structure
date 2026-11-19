@@ -4,7 +4,7 @@ import "@fontsource/instrument-serif/latin-400.css";
 import "@fontsource-variable/instrument-sans/wght.css";
 import { Score, markName, time } from "./Score";
 import { laneDefinitions, type Lane } from "./LabLanes";
-import type { TimbreScale } from "./timbre";
+import { timbreWindows, type TimbreScale, type TimbreWindow } from "./timbre";
 import { useHelper, type Mark } from "./wire";
 import "./style.css";
 
@@ -26,7 +26,7 @@ function App() {
   const { map, online, connection, send, alignment } = useHelper();
   const [chosenSource, chooseSource] = useState<number>();
   const [timbreScale, setTimbreScale] = useState<TimbreScale>("fixed");
-  const [smooth, setSmooth] = useState(true);
+  const [smoothing, setSmoothing] = useState<TimbreWindow>(1);
   const [refinedSession, setRefinedSession] = useState<string>();
   const [labOpen, setLabOpen] = useState(false);
   const [lanes, setLanes] = useState<Lane[]>(laneDefinitions.map(lane => lane.id));
@@ -103,7 +103,7 @@ function App() {
       setup: {
         notes: setup, browser: navigator.userAgent, logicalCores: navigator.hardwareConcurrency,
         source: map.source, mode: map.mode, format: "44.1 kHz stereo PCM16", analysisRateHz: 22050,
-        timbreScale, smooth, clock: "elapsed since capture", isolation: map.mode === "spotify" ? "process tree" : null,
+        timbreScale, smooth: smoothing > 0, timbreSmoothingSeconds: smoothing, clock: "elapsed since capture", isolation: map.mode === "spotify" ? "process tree" : null,
       },
       state: map.state, status: map.status, elapsed: map.elapsed, historyStart: map.historyStart,
       counters: map.counters, frames: map.frames, marks: map.marks,
@@ -192,8 +192,12 @@ function App() {
             </select>
           </label>
           <label className="scale-control">
-            <input type="checkbox" checked={smooth} onChange={event => setSmooth(event.target.checked)} />
-            Smooth timbre
+            Timbre smoothing
+            <select value={smoothing} onChange={event => setSmoothing(Number(event.target.value) as TimbreWindow)}>
+              {timbreWindows.map(seconds => <option key={seconds} value={seconds}>
+                {seconds ? `${seconds} s` : "Off"}
+              </option>)}
+            </select>
           </label>
           <div className="coverage">{time(map?.historyStart ?? 0)}–{time(map?.elapsed ?? 0)}
             <span> / {map?.historyStart ? "Latest 10 min" : "Captured range"}</span>
@@ -221,7 +225,7 @@ function App() {
           </div>
         </div>
         <Score map={scoreMap} selected={selected} select={select} timbreScale={timbreScale}
-          smooth={smooth} lanes={visibleLanes} refined={viewingRefined}/>
+          smoothing={smoothing} lanes={visibleLanes} refined={viewingRefined}/>
         <div className="score-footer">
           <span title={map?.status}>{connection || map?.status}</span>
           <span>{map?.counters.features ?? 0} feature frames</span>

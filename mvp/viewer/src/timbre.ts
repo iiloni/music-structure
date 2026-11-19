@@ -1,14 +1,17 @@
 import type { Frame } from "./wire";
 
 export type TimbreScale = "fixed" | "relative";
+export const timbreWindows = [0, .5, 1, 2, 4] as const;
+export type TimbreWindow = typeof timbreWindows[number];
 
 const offsetHz = 200;
 const fixedRange: [number, number] = [0, Math.log1p(6000 / offsetHz)];
-const smoothingFrames = 4; // One second at the feature stream's 4 Hz cadence.
+const framesPerSecond = 4;
 const minimumRelativeFrames = 16;
 
-export function displayBrightness(frames: readonly Frame[], smooth: boolean) {
+export function displayBrightness(frames: readonly Frame[], seconds: TimbreWindow) {
   const window: number[] = [];
+  const smoothingFrames = seconds * framesPerSecond;
   let previous: Frame | undefined;
   return frames.map(frame => {
     if (frame.segment !== previous?.segment || frame.index !== previous.index + 1) window.length = 0;
@@ -19,19 +22,20 @@ export function displayBrightness(frames: readonly Frame[], smooth: boolean) {
     }
 
     const brightness = Math.log1p(frame.centroidHz / offsetHz);
-    if (!smooth) return brightness;
+    if (!smoothingFrames) return brightness;
     window.push(brightness);
     if (window.length > smoothingFrames) window.shift();
     return window.reduce((sum, sample) => sum + sample, 0) / window.length;
   });
 }
 
-export function centeredBrightness(frames: readonly Frame[]) {
+export function centeredBrightness(frames: readonly Frame[], seconds: TimbreWindow) {
+  const radius = seconds * framesPerSecond / 2;
   return frames.map((frame, index) => {
     if (!frame.audible || !frame.valid) return null;
     let total = Math.log1p(frame.centroidHz / offsetHz), count = 1;
     for (const direction of [-1, 1]) {
-      for (let offset = 1; offset <= 2; offset++) {
+      for (let offset = 1; offset <= radius; offset++) {
         const other = frames[index + direction * offset];
         if (!other?.audible || !other.valid || other.segment !== frame.segment ||
             other.index !== frame.index + direction * offset) break;

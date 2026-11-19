@@ -154,8 +154,6 @@ meter::-webkit-meter-optimum-value { border-radius: 10px; background: #218264; }
   margin: 0 0 12px; color: var(--weak); font-size: .8rem;
 }
 .timing dd { margin: 0; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
-.scale-control input { accent-color: var(--mint); }
-.scale-control input:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 
 .lab-toolbar, .lab-inspector {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;

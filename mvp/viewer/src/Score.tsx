@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Frame, MapState, Mark, Passage } from "./wire";
 import { drawLabLanes, laneDefinitions, type Lane, type LaneRow } from "./LabLanes";
-import { brightnessHz, brightnessRange, centeredBrightness, displayBrightness, type TimbreScale } from "./timbre";
+import { brightnessHz, brightnessRange, centeredBrightness, displayBrightness, type TimbreScale, type TimbreWindow } from "./timbre";
 
 export function time(seconds: number, precision = false) {
   const rounded = Math.max(0, precision ? Math.round(seconds * 10) / 10 : Math.floor(seconds + 0.001));
@@ -19,8 +19,8 @@ const repeatColor = "#aeaeff", contourColor = "#9cebd6", markerColor = "#ffab86"
 const ink = "#18264c", grid = "#36446e", faint = "#aab8d6";
 const top = 5, repeatBaseline = 123, contourTop = 163, contourBottom = 283;
 
-export function Score({ map, selected, select, timbreScale, smooth, lanes, refined }: {
-  map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale; smooth: boolean; lanes: readonly Lane[]; refined: boolean;
+export function Score({ map, selected, select, timbreScale, smoothing, lanes, refined }: {
+  map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale; smoothing: TimbreWindow; lanes: readonly Lane[]; refined: boolean;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -41,9 +41,12 @@ export function Score({ map, selected, select, timbreScale, smooth, lanes, refin
   const horizon = from + Math.max(48, last - from);
   const x = (value: number) => 14 + ((Math.max(from, value) - from) / (horizon - from)) * plotWidth;
   const frames = map?.frames;
-  const contour = useMemo(() => refined && smooth
-    ? centeredBrightness(frames ?? []) : displayBrightness(frames ?? [], smooth), [frames, smooth, refined]);
-  const [low, high] = useMemo(() => brightnessRange(contour, timbreScale), [contour, timbreScale]);
+  const rawContour = useMemo(() => displayBrightness(frames ?? [], 0), [frames]);
+  const contour = useMemo(() => {
+    if (!smoothing) return rawContour;
+    return refined ? centeredBrightness(frames ?? [], smoothing) : displayBrightness(frames ?? [], smoothing);
+  }, [frames, rawContour, refined, smoothing]);
+  const [low, high] = useMemo(() => brightnessRange(rawContour, timbreScale), [rawContour, timbreScale]);
   const axisValues = [high, (low + high) / 2, low];
   const axisPositions = [contourTop, (contourTop + contourBottom) / 2, contourBottom];
   const marks = map?.marks;

@@ -16,7 +16,7 @@ The build checks TypeScript, bundles React and the fonts into the helper, and pu
 
 1. Open Spotify desktop, play locally on the intended output and choose its process in **Source**. If Spotify opened after the helper page, use **Refresh Spotify sources**.
 2. Choose **Start capture**. The status and dBFS meter distinguish arriving Spotify audio from waiting. Use **New listen** at a track boundary or after seeking.
-3. Select a repeat link, texture marker or gap. Tab focus also selects a marker. Escape clears the selection. The time ruler uses elapsed capture time. The brightness line averages up to one second of audible frames. Clear **Smooth timbre** to see each quarter-second measurement. In the song map, set **Timbre scale** to **Relative** to spread out the visible range after four seconds of audible features. **Fixed** keeps the same axis across listens.
+3. Select a repeat link, texture marker or gap. Tab focus also selects a marker. Escape clears the selection. The time ruler uses elapsed capture time. Use **Timbre smoothing** to choose Off, 0.5, 1, 2 or 4 seconds. The live contour averages recent brightness measurements, with a one-second window by default. Longer windows tame spikes and take longer to settle after sharp changes. Choose **Off** to see each quarter-second measurement. In the song map, set **Timbre scale** to **Relative** to spread out the visible range after four seconds of audible features. **Fixed** keeps the same axis across listens.
 4. Choose **Stop** to freeze the score, then open **Evaluation summary**. Add setup notes and save timestamped features, findings and counters as JSON. Closing the listening tab stops capture. Press Ctrl+C in the helper console to exit.
 5. After a Spotify restart or capture error, **Refresh Spotify sources** and **Resume capture**. This preserves available history and places a gap before newly captured material. Use **New listen** to clear the map.
 
@@ -41,7 +41,7 @@ Capture a song from the beginning, then choose **Stop** and **Refine listen**. U
 
 For the known control, select **Three returns** and choose **Open replay**, then **Refine listen**. Family A should cover passages near 0–12, 22.5–34.5 and 46.5–58.5 seconds. The refined markers should land at 12, 22.5, 34.5 and 46.5 seconds. There is a fourth copy of the phrase after the 58.5–62.5 second capture gap. The pass analyzes each continuous capture span independently.
 
-The pass uses the retained feature history, up to ten minutes. It searches for sustained harmonic matches over the captured spans and measures texture change using spectral variation across the listen. With **Smooth timbre** selected, the refined line uses centered smoothing. Use **Fixed** to compare the line on the same scale in both versions. After the fixture, try a familiar Spotify song and compare the highlighted returns and boundary times by ear.
+The pass uses the retained feature history, up to ten minutes. It searches for sustained harmonic matches over the captured spans and measures texture change using spectral variation across the listen. The refined line centers the selected smoothing window around each point. Both versions keep the same scale bounds when you change smoothing on a stopped listen. Use **Fixed** to keep the same bounds across different songs. After the fixture, try a familiar Spotify song and compare the highlighted returns and boundary times by ear.
 
 ## Generate or replay without Spotify
 

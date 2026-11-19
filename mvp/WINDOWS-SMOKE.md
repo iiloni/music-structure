@@ -37,7 +37,7 @@ Compare the median centroid and per-band mean log-mel energy for the same clean 
 
 ## Check a perceived visualization delay
 
-Choose **Fixed** under **Timbre scale** and clear **Smooth timbre**. Open **Evaluation summary** while capture runs. Listen through the transition, then pause Spotify sharply and compare when you hear it stop with when **Input level** falls. If the meter responds promptly but **Latest measured brightness** stays high through the interlude, the captured spectral centroid is responding differently from your perception.
+Choose **Fixed** under **Timbre scale** and set **Timbre smoothing** to **Off**. Open **Evaluation summary** while capture runs. Listen through the transition, then pause Spotify sharply and compare when you hear it stop with when **Input level** falls. If the meter responds promptly but **Latest measured brightness** stays high through the interlude, the captured spectral centroid is responding differently from your perception.
 
 Record **Audio timestamp to packet read** and **Packet read to chart paint** in both Boom 3D settings. The first uses the WASAPI clock on Spotify captures and may be unavailable when timestamps are flagged as unreliable. The second uses the browser clock alignment. Both estimate parts of the capture path. Use the audible pause to test alignment against what reaches the listening device. Save the JSON summary with the exact passage and the audio route.
 
