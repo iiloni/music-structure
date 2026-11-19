@@ -75,17 +75,26 @@ meter::-webkit-meter-optimum-value { border-radius: 10px; background: #218264; }
 .score { background: var(--ink); color: #fff; border-radius: 13px; overflow: hidden; }
 .score-heading, .score-footer { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 14px 20px; }
 .score-heading { min-height: 56px; border-bottom: 1px solid #36446e; }
-.score-heading h2 { font-size: 1.09rem; font-weight: 560; }
+.score-heading h2 { margin-right: auto; font-size: 1.09rem; font-weight: 560; }
+.scale-control { display: inline-flex; align-items: center; gap: 7px; font-size: .8rem; color: #bac5e0; }
+.scale-control select {
+  color-scheme: dark; background: #25365e; border: 1px solid #617195; color: #f5f6ff;
+  border-radius: 4px; padding: 4px 6px;
+}
+.scale-control select:focus-visible { outline-color: #fff; }
 .coverage { font-variant-numeric: tabular-nums; font-size: .8rem; color: #f5f6ff; }
 .coverage span { color: #bac5e0; }
 .plot { height: 340px; display: grid; grid-template-columns: 91px minmax(0, 1fr); padding-right: 9px; }
 .plot-lanes { position: relative; color: #e0e7f7; font-size: .83rem; }
 .plot-lanes span { position: absolute; left: 17px; }
-.plot-lanes small { display: block; color: #aab8d6; margin: 4px 0 0 13px; }
 .plot-lanes i { display: inline-block; width: 7px; height: 7px; border-radius: 20px; margin-right: 6px; }
 .repeat-lane { top: 65px; }
 .repeat-lane i { background: var(--lilac); }
-.timbre-lane { top: 170px; }
+.timbre-lane { top: 143px; }
+.plot-lanes .timbre-tick {
+  right: 2px; left: auto; transform: translateY(-50%); color: #bac5e0;
+  font-size: .69rem; font-variant-numeric: tabular-nums;
+}
 .timbre-lane i { background: var(--mint); }
 .ruler-lane { top: 309px; color: #aab8d6; }
 .plot-field { position: relative; min-width: 0; }
@@ -133,6 +142,7 @@ meter::-webkit-meter-optimum-value { border-radius: 10px; background: #218264; }
   .meter { width: 132px; margin: 0 0 6px; }
   .plot { grid-template-columns: 68px minmax(0, 1fr); }
   .plot-lanes span { left: 9px; font-size: .74rem; }
+  .score-heading { flex-wrap: wrap; row-gap: 8px; }
   .score-heading, .score-footer { padding-left: 12px; padding-right: 12px; }
   .review { grid-template-columns: 1fr; }
   .review .annotations { padding-right: 0; }

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@fontsource/instrument-serif/latin-400.css";
 import "@fontsource-variable/instrument-sans/wght.css";
 import { Score, markName, time } from "./Score";
+import type { TimbreScale } from "./timbre";
 import { useHelper, type Mark } from "./wire";
 import "./style.css";
 
@@ -21,6 +22,7 @@ function markTimes(mark: Mark) {
 function App() {
   const { map, online, connection, send, alignment } = useHelper();
   const [chosenSource, chooseSource] = useState<number>();
+  const [timbreScale, setTimbreScale] = useState<TimbreScale>("fixed");
   const [fixture, chooseFixture] = useState<Fixture>("return");
   const [selection, setSelection] = useState<{ session?: string; id: number }>();
   const [setup, setSetup] = useState("");
@@ -139,11 +141,18 @@ function App() {
       <section className="score" aria-labelledby="map-heading">
         <header className="score-heading">
           <h2 id="map-heading">Song map</h2>
+          <label className="scale-control">
+            Timbre scale
+            <select value={timbreScale} onChange={event => setTimbreScale(event.target.value as TimbreScale)}>
+              <option value="fixed">Fixed</option>
+              <option value="relative">Relative</option>
+            </select>
+          </label>
           <div className="coverage">{time(map?.historyStart ?? 0)}–{time(map?.elapsed ?? 0)}
             <span> / {map?.historyStart ? "Latest 10 min" : "Captured range"}</span>
           </div>
         </header>
-        <Score map={map} selected={selected} select={select}/>
+        <Score map={map} selected={selected} select={select} timbreScale={timbreScale}/>
         <div className="score-footer">
           <span title={map?.status}>{connection || map?.status}</span>
           <span>{map?.counters.features ?? 0} feature frames</span>

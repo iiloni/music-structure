@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import type { MapState, Mark } from "./wire";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { Frame, MapState, Mark } from "./wire";
+import { brightnessHz, brightnessRange, smoothBrightness, type TimbreScale } from "./timbre";
 
 export function time(seconds: number, precision = false) {
   const rounded = Math.max(0, precision ? Math.round(seconds * 10) / 10 : Math.floor(seconds + 0.001));
@@ -16,8 +17,8 @@ const repeatColor = "#aeaeff", contourColor = "#9cebd6", markerColor = "#ffab86"
 const ink = "#18264c", grid = "#36446e", faint = "#aab8d6";
 const top = 5, repeatBaseline = 123, contourTop = 163, contourBottom = 283, chartHeight = 340;
 
-export function Score({ map, selected, select }: {
-  map?: MapState; selected?: Mark; select: (id: number) => void;
+export function Score({ map, selected, select, timbreScale }: {
+  map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -28,6 +29,10 @@ export function Score({ map, selected, select }: {
   const horizon = from + Math.max(48, last - from);
   const x = (value: number) => 14 + ((Math.max(from, value) - from) / (horizon - from)) * plotWidth;
   const frames = map?.frames;
+  const contour = useMemo(() => smoothBrightness(frames ?? []), [frames]);
+  const [low, high] = useMemo(() => brightnessRange(contour, timbreScale), [contour, timbreScale]);
+  const axisValues = [high, (low + high) / 2, low];
+  const axisPositions = [contourTop, (contourTop + contourBottom) / 2, contourBottom];
   const marks = map?.marks;
   const repeats = marks?.filter(mark => mark.otherEnd !== null && mark.otherEnd >= from) ?? [];
   const events = marks?.filter(mark => mark.kind !== "repeat") ?? [];
@@ -116,7 +121,7 @@ export function Score({ map, selected, select }: {
     }
 
     let run: { x: number; y: number }[] = [];
-    let previousSegment: number | undefined;
+    let previous: Frame | undefined;
     const flush = () => {
       if (!run.length) return;
       context.beginPath();
@@ -132,14 +137,15 @@ export function Score({ map, selected, select }: {
       context.fill();
       run = [];
     };
-    for (const frame of frames ?? []) {
-      if (frame.segment !== previousSegment || !frame.audible || !frame.valid) flush();
-      previousSegment = frame.segment;
-      if (!frame.audible || !frame.valid) {
+    for (const [index, frame] of (frames ?? []).entries()) {
+      const brightness = contour[index];
+      if (frame.segment !== previous?.segment || frame.index !== previous.index + 1 || brightness === null) flush();
+      previous = frame;
+      if (brightness === null) {
         if (frame.valid) line(x(frame.start), contourBottom, x(frame.end), contourBottom, "#6d91a1");
         continue;
       }
-      const value = Math.min(1, Math.log1p(frame.centroidHz / 200) / Math.log1p(6000 / 200));
+      const value = Math.max(0, Math.min(1, (brightness - low) / (high - low)));
       const y = contourBottom - value * (contourBottom - contourTop);
       if (!run.length) run.push({ x: x(frame.start), y });
       run.push({ x: x(frame.end), y });
@@ -161,7 +167,13 @@ export function Score({ map, selected, select }: {
   return <div className="plot">
     <div className="plot-lanes" aria-hidden="true">
       <span className="repeat-lane"><i />Repeats</span>
-      <span className="timbre-lane"><i />Timbre<small>Brighter ↑</small></span>
+      <span className="timbre-lane"><i />Timbre</span>
+      {axisValues.map((value, index) => {
+        const hz = brightnessHz(value);
+        return <span key={index} className="timbre-tick" style={{ top: axisPositions[index] }}>
+          {hz >= 1000 ? `${(hz / 1000).toFixed(2).replace(/\.?0+$/, "")} kHz` : `${hz} Hz`}
+        </span>;
+      })}
       <span className="ruler-lane">Elapsed</span>
     </div>
     <div className="plot-field" ref={wrapper}>

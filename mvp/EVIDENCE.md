@@ -15,7 +15,7 @@ The Windows x64 package builds and the generated controls pass. The physical Spo
 | Gain step at 10 s | 80 feature frames. The measured level rose by over 10 dB and the detector emitted zero annotations. |
 | Silence and interruption | 128 valid feature frames including silent frames, one gap at 14–18 s, and no repeat across the gap. The post-gap material deliberately starts with the earlier harmony to test the guard. |
 
-The threshold set is `score-1`. Timbre uses a 15.5 dB spectral-shape threshold with sustained evidence. Repeats use an eight-second chroma window and a .91 similarity floor, with alignment, movement and local contrast checks. The generated controls informed these settings. With real music, an eight-second fixed window can miss shorter or tempo-shifted returns. The brightness line uses a fixed centroid scale.
+The threshold set is `score-1`. Timbre uses a 15.5 dB spectral-shape threshold with sustained evidence. Repeats use an eight-second chroma window and a .91 similarity floor, with alignment, movement and local contrast checks. The generated controls informed these settings. With real music, an eight-second fixed window can miss shorter or tempo-shifted returns. The fixed centroid scale is the default. The viewer also offers a relative scale for inspecting smaller brightness changes.
 
 ## Physical measurements pending
 
