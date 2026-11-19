@@ -26,7 +26,7 @@ function markTimes(mark: Mark) {
 function App() {
   const { map, online, connection, send, alignment } = useHelper();
   const [mlSelection, setMlSelection] = useState<{ session?: string; id?: number }>();
-  const [mlOptIn, setMlOptIn] = useState(false);
+  const [mlSource, setMlSource] = useState<string>();
   const [chosenSource, chooseSource] = useState<number>();
   const [timbreScale, setTimbreScale] = useState<TimbreScale>("fixed");
   const [smoothing, setSmoothing] = useState<TimbreWindow>(1);
@@ -49,6 +49,9 @@ function App() {
   const visibleMarks = scoreMap?.marks.filter(mark => mark.kind !== "event" || visibleLanes.includes("event"));
   const selected = visibleMarks?.find(mark => selection?.session === map?.sessionId && mark.id === selection?.id);
   const source = map?.sources.find(item => item.pid === chosenSource) ?? map?.sources[0];
+  const sourceIdentity = source ? `${source.pid}/${source.started}` : undefined;
+  const mlOptIn = !!sourceIdentity && mlSource === sourceIdentity;
+  const resumesSpotify = source?.kind === "spotify" && map?.mode === "spotify" && !map.ml && !mlOptIn;
   const pinnedMl = mlSelection?.session === map?.sessionId ? mlSelection?.id : undefined;
   const cueTime = map?.ml?.persistence.cues.find(cue => cue.id === pinnedMl)?.time;
   const running = online && active.has(map?.state ?? "");
@@ -167,7 +170,7 @@ function App() {
             <select aria-label="Playback source" value={source?.pid ?? ""} disabled={!source || running}
               onChange={event => {
                 chooseSource(Number(event.target.value));
-                setMlOptIn(false);
+                setMlSource(undefined);
               }}>
               {!source && <option value="">{map?.windowsCapture ? "Open Spotify or VLC" : "Player capture requires Windows 11"}</option>}
               {map?.sources.map(item => <option key={item.pid} value={item.pid}>{item.label}</option>)}
@@ -181,13 +184,13 @@ function App() {
           {running ? <button className="primary" type="button" disabled={map?.state === "stopping"}
             onClick={() => send({ action: "stop" })}><i className="stop-glyph"/>Stop</button> :
             <button className="primary" type="button" disabled={!online || !source || map?.refining}
-              onClick={() => source && send({ action: "start", mode: source.kind, pid: source.pid, started: source.started, ml: source.kind === "local" && mlOptIn })}>
-              <i className="record-glyph"/>{map?.mode === "spotify" && source?.kind === "spotify" ? "Resume capture" : "Start capture"}
+              onClick={() => source && send({ action: "start", mode: source.kind, pid: source.pid, started: source.started, ml: mlOptIn })}>
+              <i className="record-glyph"/>{resumesSpotify ? "Resume capture" : "Start capture"}
             </button>}
         </div>
-        {source?.kind === "local" && <label className="ml-opt-in">
-          <input type="checkbox" checked={mlOptIn} onChange={event => setMlOptIn(event.target.checked)} disabled={running} />
-          <span>Experimental ML texture<small>Original or licensed local music</small></span>
+        {source && <label className="ml-opt-in">
+          <input type="checkbox" checked={mlOptIn} onChange={event => setMlSource(event.target.checked ? sourceIdentity : undefined)} disabled={running} />
+          <span>Experimental ML texture<small>Runs locally on the selected audio</small></span>
         </label>}
         <div className="meter">
           <div><span>Input level</span><strong>{rms == null ? "—" : `${rms.toFixed(0)} dBFS`}</strong></div>

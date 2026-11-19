@@ -7,7 +7,7 @@ static class MlVerification
         try
         {
             VerifyPreprocessing();
-            Require(!Session.AllowsMl("spotify", "ml") && !Session.AllowsMl("replay", "ml") &&
+            Require(Session.AllowsMl("spotify", null) && !Session.AllowsMl("replay", "ml") &&
                 Session.AllowsMl("local", null) && Session.AllowsMl("fixture", "ml"), "Unexpected ML source authorization.");
             double loadStart = Clock.Milliseconds;
             using var model = new Musicnn(modelPath);

@@ -42,7 +42,7 @@ sealed class Session
         {
             if (running is not null || refining) throw new InvalidOperationException("Wait for the current operation to finish.");
             if (mlEnabled && !AllowsMl(mode, fixture))
-                throw new InvalidOperationException("ML texture analysis is available for VLC local playback and the ML control.");
+                throw new InvalidOperationException("ML texture analysis is available for Spotify, VLC and the live ML control.");
             Source? target = null;
             string label;
             if (mode is "spotify" or "local")
@@ -64,7 +64,7 @@ sealed class Session
             stop = new CancellationTokenSource();
             var token = stop.Token;
             double epoch = mode == "replay" ? 0 : Clock.Milliseconds;
-            bool resume = mode == "spotify" && listen?.Mode == "spotify";
+            bool resume = !mlEnabled && mode == "spotify" && listen is { Mode: "spotify", Ml: null };
             if (resume)
             {
                 listen!.Source = label;
@@ -118,7 +118,7 @@ sealed class Session
         }
     }
 
-    internal static bool AllowsMl(string mode, string? fixture) => mode == "local" || (mode == "fixture" && fixture == "ml");
+    internal static bool AllowsMl(string mode, string? fixture) => mode is "spotify" or "local" || (mode == "fixture" && fixture == "ml");
 
     async Task Stream(Source? target, string? fixture, double epoch, CancellationToken token)
     {
