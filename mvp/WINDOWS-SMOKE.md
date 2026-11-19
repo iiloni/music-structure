@@ -35,6 +35,12 @@ Compare the median centroid and per-band mean log-mel energy for the same clean 
 | Exclusive playback | If Spotify and the target device expose an exclusive playback option, enable it and repeat the capture attempt. | Record whether isolated samples arrive or the source waits or becomes unavailable. Mark unverified if exclusive playback is unavailable. |
 | Close | Start capture, then close the listening tab while the helper remains open. Reopen the printed URL after a moment. | The score returns frozen. No new frames arrive until capture is started explicitly. Spotify remains audible throughout. |
 
+## Check a perceived visualization delay
+
+Choose **Fixed** under **Timbre scale** and clear **Smooth timbre**. Open **Evaluation summary** while capture runs. Listen through the transition, then pause Spotify sharply and compare when you hear it stop with when **Input level** falls. If the meter responds promptly but **Latest measured brightness** stays high through the interlude, the captured spectral centroid is responding differently from your perception.
+
+Record **Audio timestamp to packet read** and **Packet read to chart paint** in both Boom 3D settings. The first uses the WASAPI clock on Spotify captures and may be unavailable when timestamps are flagged as unreliable. The second uses the browser clock alignment. Both estimate parts of the capture path. Use the audible pause to test alignment against what reaches the listening device. Save the JSON summary with the exact passage and the audio route.
+
 ## Thirty-minute run
 
 Use a dedicated browser instance with only the listening tab and leave it in the foreground. Record a five-minute idle baseline for the same helper and browser, then use a continuous 30-minute Spotify playlist run. Leave the same route in place and avoid seeks or manual resets during this measurement. The visible score retains the latest ten minutes while capture counters accumulate for the full listen.

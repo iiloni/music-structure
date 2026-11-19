@@ -93,7 +93,10 @@ sealed class Listen(double startMs, string mode, string source)
             var frame = new Feature(++featureCount, segmentStart + start, sessionEnd,
                 includePaintClock && !timestampError
                     ? packet.StartMs + (StartedMs + sessionEnd * 1000 - audioStart) : null,
-                segment, rms, centroid, true, audible, mel, chroma);
+                segment, rms, centroid, true, audible, mel, chroma)
+            {
+                PacketReadMs = includePaintClock ? packet.PacketReadMs : null
+            };
             Frames.Enqueue(frame);
             InputDb = rms;
             coverageEnd = sessionEnd;

@@ -16,7 +16,7 @@ The build checks TypeScript, bundles React and the fonts into the helper, and pu
 
 1. Open Spotify desktop, play locally on the intended output and choose its process in **Source**. If Spotify opened after the helper page, use **Refresh Spotify sources**.
 2. Choose **Start capture**. The status and dBFS meter distinguish arriving Spotify audio from waiting. Use **New listen** at a track boundary or after seeking.
-3. Select a repeat link, texture marker or gap. Tab focus also selects a marker. Escape clears the selection. The time ruler uses elapsed capture time. The brightness line averages up to one second of audible frames. In the song map, set **Timbre scale** to **Relative** to spread out the visible range after four seconds of audible features. **Fixed** keeps the same axis across listens.
+3. Select a repeat link, texture marker or gap. Tab focus also selects a marker. Escape clears the selection. The time ruler uses elapsed capture time. The brightness line averages up to one second of audible frames. Clear **Smooth timbre** to see each quarter-second measurement. In the song map, set **Timbre scale** to **Relative** to spread out the visible range after four seconds of audible features. **Fixed** keeps the same axis across listens.
 4. Choose **Stop** to freeze the score, then open **Evaluation summary**. Add setup notes and save timestamped features, findings and counters as JSON. Closing the listening tab stops capture. Press Ctrl+C in the helper console to exit.
 5. After a Spotify restart or capture error, **Refresh Spotify sources** and **Resume capture**. This preserves available history and places a gap before newly captured material. Use **New listen** to clear the map.
 

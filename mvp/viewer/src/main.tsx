@@ -9,6 +9,7 @@ import "./style.css";
 
 const fixtures = { return: "A–B–A study", gain: "Gain step", gap: "Interrupted listen" };
 type Fixture = keyof typeof fixtures;
+type PaintReading = { index: number; ms: number | null; timestampToPacketReadMs: number | null; afterPacketReadMs: number | null; error: number };
 const active = new Set(["waiting", "capturing", "loading", "stopping"]);
 
 function markTimes(mark: Mark) {
@@ -23,10 +24,13 @@ function App() {
   const { map, online, connection, send, alignment } = useHelper();
   const [chosenSource, chooseSource] = useState<number>();
   const [timbreScale, setTimbreScale] = useState<TimbreScale>("fixed");
+  const [smooth, setSmooth] = useState(true);
+  const [showTiming, setShowTiming] = useState(false);
+  const [timing, setTiming] = useState<{ session: string; reading: PaintReading }>();
   const [fixture, chooseFixture] = useState<Fixture>("return");
   const [selection, setSelection] = useState<{ session?: string; id: number }>();
   const [setup, setSetup] = useState("");
-  const latency = useRef({ session: "", index: 0, readings: [] as { index: number; ms: number; error: number }[] });
+  const latency = useRef({ session: "", index: 0, readings: [] as PaintReading[] });
   const selected = map?.marks.find(mark => selection?.session === map.sessionId && mark.id === selection?.id);
   const source = map?.sources.find(item => item.pid === chosenSource) ?? map?.sources[0];
   const running = online && active.has(map?.state ?? "");
@@ -55,25 +59,37 @@ function App() {
     requestAnimationFrame(() => requestAnimationFrame(now => {
       if (document.hidden || state !== latency.current) return;
       for (const frame of newFrames) {
-        if (frame.clockEndMs === null) continue;
-        const ms = now + sync.offset - frame.clockEndMs;
-        if (ms >= -sync.uncertainty) state.readings.push({ index: frame.index, ms: Math.max(0, ms), error: sync.uncertainty });
+        const age = (stamp: number) => {
+          const elapsed = now + sync.offset - stamp;
+          return elapsed >= -sync.uncertainty ? Math.max(0, elapsed) : null;
+        };
+        const ms = frame.clockEndMs === null ? null : age(frame.clockEndMs);
+        const afterPacketReadMs = frame.packetReadMs === undefined ? null : age(frame.packetReadMs);
+        if (ms === null && afterPacketReadMs === null) continue;
+        state.readings.push({
+          index: frame.index, ms, afterPacketReadMs, error: sync.uncertainty,
+          timestampToPacketReadMs: frame.clockEndMs === null || frame.packetReadMs === undefined
+            ? null : frame.packetReadMs - frame.clockEndMs,
+        });
       }
+      const reading = state.readings.at(-1);
+      if (showTiming && reading?.index === newFrames.at(-1)!.index)
+        setTiming({ session: state.session, reading });
       if (state.readings.length > 7200) state.readings.splice(0, state.readings.length - 7200);
     }));
-  }, [map, alignment]);
+  }, [map, alignment, showTiming]);
 
   function exportSummary() {
     if (!map) return;
     const readings = latency.current.readings;
-    const sorted = readings.map(reading => reading.ms).sort((a, b) => a - b);
+    const sorted = readings.map(reading => reading.ms).filter(ms => ms !== null).sort((a, b) => a - b);
     const summary = {
       version: map.version, analysisVersion: map.analysisVersion, sessionId: map.sessionId,
       exportedAt: new Date().toISOString(),
       setup: {
         notes: setup, browser: navigator.userAgent, logicalCores: navigator.hardwareConcurrency,
         source: map.source, mode: map.mode, format: "44.1 kHz stereo PCM16", analysisRateHz: 22050,
-        clock: "elapsed since capture", isolation: map.mode === "spotify" ? "process tree" : null,
+        timbreScale, smooth, clock: "elapsed since capture", isolation: map.mode === "spotify" ? "process tree" : null,
       },
       state: map.state, status: map.status, elapsed: map.elapsed, historyStart: map.historyStart,
       counters: map.counters, frames: map.frames, marks: map.marks,
@@ -87,6 +103,9 @@ function App() {
     download.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+
+  const reading = timing?.session === map?.sessionId ? timing?.reading : undefined;
+  const latest = map?.frames.at(-1);
 
   function select(id: number) {
     setSelection({ session: map?.sessionId, id });
@@ -148,11 +167,15 @@ function App() {
               <option value="relative">Relative</option>
             </select>
           </label>
+          <label className="scale-control">
+            <input type="checkbox" checked={smooth} onChange={event => setSmooth(event.target.checked)} />
+            Smooth timbre
+          </label>
           <div className="coverage">{time(map?.historyStart ?? 0)}–{time(map?.elapsed ?? 0)}
             <span> / {map?.historyStart ? "Latest 10 min" : "Captured range"}</span>
           </div>
         </header>
-        <Score map={map} selected={selected} select={select} timbreScale={timbreScale}/>
+        <Score map={map} selected={selected} select={select} timbreScale={timbreScale} smooth={smooth}/>
         <div className="score-footer">
           <span title={map?.status}>{connection || map?.status}</span>
           <span>{map?.counters.features ?? 0} feature frames</span>
@@ -201,9 +224,19 @@ function App() {
           <button type="button" className="quiet" disabled={!online || running}
             onClick={() => send({ action: "start", mode: "fixture", fixture })}>Run in real time</button>
         </div>
-        <details>
+        <details onToggle={event => {
+          setShowTiming(event.currentTarget.open);
+          const state = latency.current;
+          const reading = state.readings.at(-1);
+          if (event.currentTarget.open && reading) setTiming({ session: state.session, reading });
+        }}>
           <summary>Evaluation summary</summary>
           <div className="export">
+            {map?.mode && map.mode !== "replay" && <dl className="timing">
+              <dt>Latest measured brightness</dt><dd>{latest?.audible && map.inputDb !== null ? `${Math.round(latest.centroidHz)} Hz` : "—"}</dd>
+              <dt>Audio timestamp to packet read</dt><dd>{reading?.timestampToPacketReadMs == null ? "—" : `${Math.round(reading.timestampToPacketReadMs)} ms`}</dd>
+              <dt>Packet read to chart paint</dt><dd>{reading?.afterPacketReadMs == null ? "—" : `${Math.round(reading.afterPacketReadMs)} ms`}</dd>
+            </dl>}
             <label className="field"><span>Setup notes</span>
               <textarea value={setup} onChange={event => setSetup(event.target.value)} maxLength={4000}
                 placeholder="Windows build, Spotify version, output device, Boom 3D preset, excerpt and observations"/>

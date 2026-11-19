@@ -7,7 +7,7 @@ static class Clock
     public static double Milliseconds => Stopwatch.GetTimestamp() * (1000.0 / Stopwatch.Frequency);
 }
 
-record Packet(long Sequence, double StartMs, short[] Samples, uint Flags = 0, string? Interruption = null)
+record Packet(long Sequence, double StartMs, short[] Samples, uint Flags = 0, string? Interruption = null, double? PacketReadMs = null)
 {
     public const int Rate = 44100;
     public const int Channels = 2;
@@ -16,7 +16,11 @@ record Packet(long Sequence, double StartMs, short[] Samples, uint Flags = 0, st
 }
 
 record Feature(long Index, double Start, double End, double? ClockEndMs, int Segment,
-    double RmsDb, double CentroidHz, bool Valid, bool Audible, double[] Mel, double[] Chroma);
+    double RmsDb, double CentroidHz, bool Valid, bool Audible, double[] Mel, double[] Chroma)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public double? PacketReadMs { get; init; }
+}
 
 sealed class AudioFeatures
 {

@@ -47,7 +47,13 @@ static class Verification
             foreach (var packet in Fixtures.Packets("gain").Take(50).Where(p => p.Sequence != 25)) skipped.Add(packet, false);
             Require(skipped.Counters.Discontinuities == 1 && skipped.Marks.ToArray() is [{ Kind: "gap" }] &&
                 skipped.Frames.Select(f => f.Segment).Distinct().Count() == 2, "Sequence break did not split analysis.");
-            Console.WriteLine("PASS: deterministic fixture controls and packet sequence reset.");
+            var delayed = new Listen(0, "fixture", "timing probe");
+            foreach (var packet in Fixtures.Packets("gain").Take(6))
+                delayed.Add(packet with { PacketReadMs = packet.StartMs + 2_050 }, true);
+            var timedFrame = delayed.Frames.Single();
+            Require(timedFrame.ClockEndMs == 250 && timedFrame.PacketReadMs == 2_300,
+                "Packet read time failed to preserve the simulated capture delay.");
+            Console.WriteLine("PASS: deterministic fixture controls, packet sequence reset and timing probe.");
             return 0;
         }
         catch (InvalidOperationException ex)

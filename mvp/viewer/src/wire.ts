@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 export interface Frame {
-  index: number; start: number; end: number; clockEndMs: number | null; segment: number;
+  index: number; start: number; end: number; clockEndMs: number | null; packetReadMs?: number; segment: number;
   rmsDb: number; centroidHz: number; valid: boolean; audible: boolean; mel: number[]; chroma: number[];
 }
 export interface Mark {

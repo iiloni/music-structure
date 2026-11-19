@@ -7,7 +7,7 @@ const fixedRange: [number, number] = [0, Math.log1p(6000 / offsetHz)];
 const smoothingFrames = 4; // One second at the feature stream's 4 Hz cadence.
 const minimumRelativeFrames = 16;
 
-export function smoothBrightness(frames: readonly Frame[]) {
+export function displayBrightness(frames: readonly Frame[], smooth: boolean) {
   const window: number[] = [];
   let previous: Frame | undefined;
   return frames.map(frame => {
@@ -18,7 +18,9 @@ export function smoothBrightness(frames: readonly Frame[]) {
       return null;
     }
 
-    window.push(Math.log1p(frame.centroidHz / offsetHz));
+    const brightness = Math.log1p(frame.centroidHz / offsetHz);
+    if (!smooth) return brightness;
+    window.push(brightness);
     if (window.length > smoothingFrames) window.shift();
     return window.reduce((sum, sample) => sum + sample, 0) / window.length;
   });

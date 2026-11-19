@@ -116,7 +116,7 @@ static class Wasapi
                     finally { Check(capture.ReleaseBuffer(frames)); }
 
                     lastPacket = Clock.Milliseconds;
-                    enqueue(packet);
+                    enqueue(packet with { PacketReadMs = lastPacket });
                     Check(capture.GetNextPacketSize(out available));
                 }
             }

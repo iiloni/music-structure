@@ -138,7 +138,7 @@ sealed class Session
                         int delay = (int)(due - Clock.Milliseconds);
                         if (delay > 0 && token.WaitHandle.WaitOne(delay)) break;
                         token.ThrowIfCancellationRequested();
-                        channel.Writer.WriteAsync(packet with { StartMs = epoch + packet.StartMs }, token)
+                        channel.Writer.WriteAsync(packet with { StartMs = epoch + packet.StartMs, PacketReadMs = Clock.Milliseconds }, token)
                             .AsTask().GetAwaiter().GetResult();
                     }
                 }

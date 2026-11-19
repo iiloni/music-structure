@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Frame, MapState, Mark } from "./wire";
-import { brightnessHz, brightnessRange, smoothBrightness, type TimbreScale } from "./timbre";
+import { brightnessHz, brightnessRange, displayBrightness, type TimbreScale } from "./timbre";
 
 export function time(seconds: number, precision = false) {
   const rounded = Math.max(0, precision ? Math.round(seconds * 10) / 10 : Math.floor(seconds + 0.001));
@@ -17,8 +17,8 @@ const repeatColor = "#aeaeff", contourColor = "#9cebd6", markerColor = "#ffab86"
 const ink = "#18264c", grid = "#36446e", faint = "#aab8d6";
 const top = 5, repeatBaseline = 123, contourTop = 163, contourBottom = 283, chartHeight = 340;
 
-export function Score({ map, selected, select, timbreScale }: {
-  map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale;
+export function Score({ map, selected, select, timbreScale, smooth }: {
+  map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale; smooth: boolean;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -29,7 +29,7 @@ export function Score({ map, selected, select, timbreScale }: {
   const horizon = from + Math.max(48, last - from);
   const x = (value: number) => 14 + ((Math.max(from, value) - from) / (horizon - from)) * plotWidth;
   const frames = map?.frames;
-  const contour = useMemo(() => smoothBrightness(frames ?? []), [frames]);
+  const contour = useMemo(() => displayBrightness(frames ?? [], smooth), [frames, smooth]);
   const [low, high] = useMemo(() => brightnessRange(contour, timbreScale), [contour, timbreScale]);
   const axisValues = [high, (low + high) / 2, low];
   const axisPositions = [contourTop, (contourTop + contourBottom) / 2, contourBottom];

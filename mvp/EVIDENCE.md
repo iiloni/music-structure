@@ -7,7 +7,7 @@ The Windows x64 package builds and the generated controls pass. The physical Spo
 - Fedora 44 x64, Node 24.20.0 and .NET SDK 10.0.404. A clean npm install, TypeScript check, Vite bundle, .NET Release build and self-contained `win-x64` publish succeeded. The build script also ran under PowerShell 7.7 on Fedora. The published artifact was identified as a Windows x64 PE executable.
 - Headless Chromium loaded the embedded UI from the helper, selected the repeat by keyboard, cleared selection with Escape, inspected a gap, downloaded summaries and fit a 375 px viewport. Wrong Host and Origin requests were rejected. The UI required the local capability, rejected a second listening tab and stopped a running fixture when its tab closed.
 - The A–B–A fixture was run through the real-time queue and replayed through the same WebSocket viewer. Its 192 feature frames and annotations agreed after excluding the real-time paint clock. A headless loopback run measured 104.1 ms p95 over 192 aligned paint samples. That run used generated audio on Linux.
-- `MusicStructure --verify` checks fixture output and per-run reproducibility, then injects a dropped packet sequence number to verify that the analysis resets and emits a gap.
+- `MusicStructure --verify` checks fixture output and per-run reproducibility, then injects a dropped packet sequence number to verify that the analysis resets and emits a gap. A simulated late packet checks that the audio timestamp and packet read time are preserved separately. The live timing fields and the smoothing toggle passed a Chromium check with generated audio.
 
 | Generated control | Observed |
 | --- | --- |
