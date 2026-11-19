@@ -1,6 +1,11 @@
 [CmdletBinding()]
-param([string]$Destination = (Join-Path $PSScriptRoot '../out/win-x64'))
+param([string]$Destination)
 $ErrorActionPreference = 'Stop'
+if (-not $Destination) {
+    # $PSScriptRoot can be empty in param defaults on Windows PowerShell 5.1.
+    $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+    $Destination = Join-Path $scriptDir '..\out\win-x64'
+}
 $name = 'msd-musicnn-1.onnx'
 $hash = '49668ffec47e52e94b96f45930bb46a28a1368d4bdfb5c05378fa834aca616e1'
 [void](New-Item -ItemType Directory -Force -Path $Destination)
