@@ -33,9 +33,17 @@ Choose **Show listening lab** above the song map. Use the checkboxes to compare 
 
 For a known control, choose **Pulse and harmony** and **Open replay**. The study contains a 120 BPM C-major section, a 90 BPM E-flat-major section, accents around 10 and 38 seconds, silence at 48 seconds and a simulated gap from 52 to 56 seconds. The harmony and tempo estimates use recent context, so changes can follow the section boundary by several seconds. The generated control establishes basic behavior. Use familiar Spotify recordings to judge how much each lane helps.
 
+## Compare original and refined scores
+
+Capture a song from the beginning, then choose **Stop** and **Refine listen**. Use **Original** and **Refined** above the score to switch between estimates on the same timeline. Choose a lettered repeat link to highlight every occurrence in its family. Use the texture markers to compare where each pass places a change. The JSON summary includes both sets of findings.
+
+For the known control, select **Three returns** and choose **Open replay**, then **Refine listen**. Family A should cover passages near 0–12, 22.5–34.5 and 46.5–58.5 seconds. The refined markers should land at 12, 22.5, 34.5 and 46.5 seconds. There is a fourth copy of the phrase after the 58.5–62.5 second capture gap. The pass analyzes each continuous capture span independently.
+
+The pass uses the retained feature history, up to ten minutes. It searches for sustained harmonic matches over the captured spans and measures texture change using spectral variation across the listen. With **Smooth timbre** selected, the refined line uses centered smoothing. Use **Fixed** to compare the line on the same scale in both versions. After the fixture, try a familiar Spotify song and compare the highlighted returns and boundary times by ear.
+
 ## Generate or replay without Spotify
 
-The fixture menu has an A–B–A study, a constant-texture gain step, an interrupted listen and the pulse-and-harmony control. **Run in real time** feeds synthetic PCM into the normal sample queue while the map advances. **Open replay** sends the completed feature map through the same versioned socket and viewer. Generated fixtures are silent to the listener.
+The fixture menu has an A–B–A study, a constant-texture gain step, an interrupted listen, a pulse-and-harmony control and a repeat-family study. **Run in real time** feeds synthetic PCM into the normal sample queue while the map advances. **Open replay** sends the completed feature map through the same versioned socket and viewer. Generated fixtures are silent to the listener.
 
 On any platform with the SDK, build and run the fixture viewer from the repository root:
 

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Frame, MapState, Mark } from "./wire";
+import type { Frame, MapState, Mark, Passage } from "./wire";
 import { drawLabLanes, laneDefinitions, type Lane, type LaneRow } from "./LabLanes";
-import { brightnessHz, brightnessRange, displayBrightness, type TimbreScale } from "./timbre";
+import { brightnessHz, brightnessRange, centeredBrightness, displayBrightness, type TimbreScale } from "./timbre";
 
 export function time(seconds: number, precision = false) {
   const rounded = Math.max(0, precision ? Math.round(seconds * 10) / 10 : Math.floor(seconds + 0.001));
@@ -11,6 +11,7 @@ export function time(seconds: number, precision = false) {
 }
 
 export function markName(mark: Mark) {
+  if (mark.family) return `Repeat family ${mark.family}`;
   return { repeat: "Repeat", gap: "Gap", timbre: "Texture change", event: "Transient event" }[mark.kind];
 }
 
@@ -18,8 +19,8 @@ const repeatColor = "#aeaeff", contourColor = "#9cebd6", markerColor = "#ffab86"
 const ink = "#18264c", grid = "#36446e", faint = "#aab8d6";
 const top = 5, repeatBaseline = 123, contourTop = 163, contourBottom = 283;
 
-export function Score({ map, selected, select, timbreScale, smooth, lanes }: {
-  map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale; smooth: boolean; lanes: readonly Lane[];
+export function Score({ map, selected, select, timbreScale, smooth, lanes, refined }: {
+  map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale; smooth: boolean; lanes: readonly Lane[]; refined: boolean;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -40,12 +41,17 @@ export function Score({ map, selected, select, timbreScale, smooth, lanes }: {
   const horizon = from + Math.max(48, last - from);
   const x = (value: number) => 14 + ((Math.max(from, value) - from) / (horizon - from)) * plotWidth;
   const frames = map?.frames;
-  const contour = useMemo(() => displayBrightness(frames ?? [], smooth), [frames, smooth]);
+  const contour = useMemo(() => refined && smooth
+    ? centeredBrightness(frames ?? []) : displayBrightness(frames ?? [], smooth), [frames, smooth, refined]);
   const [low, high] = useMemo(() => brightnessRange(contour, timbreScale), [contour, timbreScale]);
   const axisValues = [high, (low + high) / 2, low];
   const axisPositions = [contourTop, (contourTop + contourBottom) / 2, contourBottom];
   const marks = map?.marks;
-  const repeats = marks?.filter(mark => mark.otherEnd !== null && mark.otherEnd >= from) ?? [];
+  const repeats = (marks ?? []).flatMap(mark => {
+    if (mark.otherStart === null || mark.otherEnd === null || mark.otherEnd < from) return [];
+    const spans = mark.occurrences ?? [mark, { start: mark.otherStart, end: mark.otherEnd }];
+    return spans.slice(1).map((next, index) => ({ mark, spans, first: spans[index], next }));
+  });
   const events = marks?.filter(mark => mark.kind !== "repeat" && (mark.kind !== "event" || eventLane)) ?? [];
   const pinned = map && inspection?.session === map.sessionId ? inspection.seconds : undefined;
   const inspectedAt = Math.max(from, Math.min(last, pinned ?? last));
@@ -54,9 +60,9 @@ export function Score({ map, selected, select, timbreScale, smooth, lanes }: {
   const inspected = inspectedAt === last && tail && last - tail.end <= .26 && !currentGap ? tail :
     frames?.find(frame => frame.start <= inspectedAt && frame.end > inspectedAt);
 
-  function arc(mark: Mark) {
-    const a = x((mark.start + mark.end) / 2);
-    const b = x((mark.otherStart! + mark.otherEnd!) / 2);
+  function arc(first: Passage, next: Passage) {
+    const a = x((first.start + first.end) / 2);
+    const b = x((next.start + next.end) / 2);
     const depth = Math.min(101, 28 + (b - a) * .18);
     return { a, b, depth, labelY: repeatBaseline - depth * .75 };
   }
@@ -116,12 +122,12 @@ export function Score({ map, selected, select, timbreScale, smooth, lanes }: {
       context.restore();
     }
 
-    for (const mark of repeats) {
+    for (const { mark, spans, first, next } of repeats) {
       const chosen = selected?.id === mark.id;
-      const { a, b, depth } = arc(mark);
-      if (chosen) {
+      const { a, b, depth } = arc(first, next);
+      if (chosen && first === spans[0]) {
         context.fillStyle = "#aeaeff24";
-        for (const [start, end] of [[mark.start, mark.end], [mark.otherStart!, mark.otherEnd!]])
+        for (const { start, end } of spans)
           context.fillRect(x(start), top, x(end) - x(start), timelineBottom - top);
       }
       context.strokeStyle = repeatColor;
@@ -132,7 +138,7 @@ export function Score({ map, selected, select, timbreScale, smooth, lanes }: {
       context.moveTo(a, repeatBaseline);
       context.bezierCurveTo(midpoint, repeatBaseline - depth, midpoint, repeatBaseline - depth, b, repeatBaseline);
       context.stroke();
-      for (const [start, end] of [[mark.start, mark.end], [mark.otherStart!, mark.otherEnd!]])
+      for (const { start, end } of [first, next])
         line(x(start), repeatBaseline, x(end), repeatBaseline, repeatColor);
       context.globalAlpha = 1;
     }
@@ -211,11 +217,13 @@ export function Score({ map, selected, select, timbreScale, smooth, lanes }: {
     <div className="plot-field" ref={wrapper}>
       <canvas ref={canvas} aria-hidden="true" style={{ height: chartHeight }} />
       <div className="plot-controls">
-        {width > 0 && repeats.map(mark => {
-          const { a, b, labelY } = arc(mark);
-          return <button key={mark.id} className="pin repeat-pin" style={{ left: (a + b) / 2, top: labelY }}
-            aria-label={`Repeat ${time(mark.start)} and ${time(mark.otherStart!)}`}
-            aria-pressed={selected?.id === mark.id} onFocus={() => select(mark.id)} onClick={() => select(mark.id)}>↔ Repeat</button>;
+        {width > 0 && repeats.map(({ mark, first, next }) => {
+          const { a, b, labelY } = arc(first, next);
+          return <button key={`${mark.id}-${first.start}`} className="pin repeat-pin" style={{ left: (a + b) / 2, top: labelY }}
+            aria-label={`${markName(mark)} ${time(first.start, Boolean(mark.family))} and ${time(next.start, Boolean(mark.family))}`}
+            aria-pressed={selected?.id === mark.id} onFocus={() => select(mark.id)} onClick={() => select(mark.id)}>
+            ↔ {mark.family ?? "Repeat"}
+          </button>;
         })}
         {width > 0 && events.map(mark => <button key={mark.id} className={`pin ${mark.kind}-pin`}
           style={{ left: x(mark.start), top: mark.kind === "gap" ? 145 :

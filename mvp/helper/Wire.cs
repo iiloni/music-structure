@@ -7,7 +7,7 @@ using System.Threading.Channels;
 namespace MusicStructure;
 
 record Command(string? Action, string? Key, string? Mode, string? Fixture,
-    int Pid, string? Started, double T0);
+    int Pid, string? Started, double T0, string? SessionId);
 record ClockReply(double T0, double T1, double T2);
 
 sealed class TickString : JsonConverter<long>
@@ -65,6 +65,7 @@ static class Wire
                             break;
                         case "stop": await session.Stop(); break;
                         case "new": session.NewListen(); break;
+                        case "refine": await session.Refine(message.SessionId, token); break;
                         case "clock": clock.Writer.TryWrite((message.T0, Clock.Milliseconds)); break;
                         default: throw new InvalidOperationException("Unknown action.");
                     }

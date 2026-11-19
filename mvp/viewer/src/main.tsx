@@ -8,12 +8,13 @@ import type { TimbreScale } from "./timbre";
 import { useHelper, type Mark } from "./wire";
 import "./style.css";
 
-const fixtures = { return: "A–B–A study", gain: "Gain step", gap: "Interrupted listen", lanes: "Pulse and harmony" };
+const fixtures = { return: "A–B–A study", gain: "Gain step", gap: "Interrupted listen", lanes: "Pulse and harmony", refinement: "Three returns" };
 type Fixture = keyof typeof fixtures;
 type PaintReading = { index: number; ms: number | null; timestampToPacketReadMs: number | null; afterPacketReadMs: number | null; error: number };
 const active = new Set(["waiting", "capturing", "loading", "stopping"]);
 
 function markTimes(mark: Mark) {
+  if (mark.occurrences) return mark.occurrences.map(span => `${time(span.start, true)}–${time(span.end, true)}`).join(", ");
   const first = time(mark.start, true);
   const range = `${first}–${time(mark.end, true)}`;
   if (mark.otherStart !== null && mark.otherEnd !== null)
@@ -26,6 +27,7 @@ function App() {
   const [chosenSource, chooseSource] = useState<number>();
   const [timbreScale, setTimbreScale] = useState<TimbreScale>("fixed");
   const [smooth, setSmooth] = useState(true);
+  const [refinedSession, setRefinedSession] = useState<string>();
   const [labOpen, setLabOpen] = useState(false);
   const [lanes, setLanes] = useState<Lane[]>(laneDefinitions.map(lane => lane.id));
   const [showTiming, setShowTiming] = useState(false);
@@ -35,10 +37,17 @@ function App() {
   const [setup, setSetup] = useState("");
   const latency = useRef({ session: "", index: 0, readings: [] as PaintReading[] });
   const visibleLanes = labOpen ? lanes : [];
-  const visibleMarks = map?.marks.filter(mark => mark.kind !== "event" || visibleLanes.includes("event"));
+  const viewingRefined = Boolean(map?.refined && refinedSession === map.sessionId);
+  const scoreMap = map && viewingRefined && map.refined ? {
+    ...map,
+    marks: [...map.marks.filter(mark => mark.kind !== "repeat" && mark.kind !== "timbre"), ...map.refined.marks]
+      .sort((a, b) => a.start - b.start),
+  } : map;
+  const visibleMarks = scoreMap?.marks.filter(mark => mark.kind !== "event" || visibleLanes.includes("event"));
   const selected = visibleMarks?.find(mark => selection?.session === map?.sessionId && mark.id === selection?.id);
   const source = map?.sources.find(item => item.pid === chosenSource) ?? map?.sources[0];
   const running = online && active.has(map?.state ?? "");
+  const canRefine = online && Boolean(map?.frames.length) && (map?.state === "stopped" || map?.state === "unavailable");
   const capturingSpotify = running && map?.mode === "spotify" && map.state !== "stopping";
   const title = map?.mode && map.mode !== "spotify" && map.source
     ? fixtures[map.source as Fixture] : "Listening score";
@@ -89,7 +98,7 @@ function App() {
     const readings = latency.current.readings;
     const sorted = readings.map(reading => reading.ms).filter(ms => ms !== null).sort((a, b) => a - b);
     const summary = {
-      version: map.version, analysisVersion: map.analysisVersion, sessionId: map.sessionId,
+      version: map.version, analysisVersion: map.analysisVersion, sessionId: map.sessionId, refinement: map.refined,
       exportedAt: new Date().toISOString(),
       setup: {
         notes: setup, browser: navigator.userAgent, logicalCores: navigator.hardwareConcurrency,
@@ -115,6 +124,11 @@ function App() {
   function openFixture(mode: "replay" | "fixture") {
     if (fixture === "lanes") setLabOpen(true);
     send({ action: "start", mode, fixture });
+  }
+
+  function compare(useRefined: boolean) {
+    setRefinedSession(useRefined ? map?.sessionId : undefined);
+    setSelection(undefined);
   }
 
   function select(id: number) {
@@ -156,7 +170,7 @@ function App() {
           <button type="button" className="quiet" disabled={!capturingSpotify} onClick={() => send({ action: "new" })}>New listen</button>
           {running ? <button className="primary" type="button" disabled={map?.state === "stopping"}
             onClick={() => send({ action: "stop" })}><i className="stop-glyph"/>Stop</button> :
-            <button className="primary" type="button" disabled={!online || !source}
+            <button className="primary" type="button" disabled={!online || !source || map?.refining}
               onClick={() => source && send({ action: "start", mode: "spotify", pid: source.pid, started: source.started })}>
               <i className="record-glyph"/>{map?.mode === "spotify" ? "Resume capture" : "Start capture"}
             </button>}
@@ -196,8 +210,18 @@ function App() {
               {lane.label}
             </label>)}
           </div>
+          <div className="comparison">
+            {map?.refined ? <div role="group" aria-label="Score version">
+              <button type="button" aria-pressed={!viewingRefined} onClick={() => compare(false)}>Original</button>
+              <button type="button" aria-pressed={viewingRefined} onClick={() => compare(true)}>Refined</button>
+            </div> : canRefine && <button type="button" disabled={map?.refining} onClick={() => {
+              compare(true);
+              send({ action: "refine", sessionId: map?.sessionId });
+            }}>{map?.refining ? "Refining…" : "Refine listen"}</button>}
+          </div>
         </div>
-        <Score map={map} selected={selected} select={select} timbreScale={timbreScale} smooth={smooth} lanes={visibleLanes}/>
+        <Score map={scoreMap} selected={selected} select={select} timbreScale={timbreScale}
+          smooth={smooth} lanes={visibleLanes} refined={viewingRefined}/>
         <div className="score-footer">
           <span title={map?.status}>{connection || map?.status}</span>
           <span>{map?.counters.features ?? 0} feature frames</span>
@@ -224,7 +248,8 @@ function App() {
             {selected ? <>
               <strong className="inspection-title">{selected.detail}</strong>
               <p className="inspection-time">{markTimes(selected)}</p>
-              {selected.kind === "repeat" && <p>{Math.round(selected.score! * 100)}% chroma similarity.
+              {selected.occurrences && <p>{selected.occurrences.length} occurrences. Lowest linked chroma similarity {Math.round(selected.score! * 100)}%.</p>}
+              {selected.kind === "repeat" && !selected.occurrences && <p>{Math.round(selected.score! * 100)}% chroma similarity.
                 First linked {((selected.detectedAt ?? selected.otherEnd!) - selected.otherStart!).toFixed(1)} s into the return.</p>}
               {selected.kind === "timbre" && <p>Brightness {selected.deltaHz! >= 0 ? "+" : ""}{Math.round(selected.deltaHz!)} Hz.
                 Spectral change {selected.score!.toFixed(1)} dB.</p>}
@@ -242,9 +267,9 @@ function App() {
               {Object.entries(fixtures).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
             </select>
           </label>
-          <button type="button" className="quiet" disabled={!online || running}
+          <button type="button" className="quiet" disabled={!online || running || map?.refining}
             onClick={() => openFixture("replay")}>Open replay</button>
-          <button type="button" className="quiet" disabled={!online || running}
+          <button type="button" className="quiet" disabled={!online || running || map?.refining}
             onClick={() => openFixture("fixture")}>Run in real time</button>
         </div>
         <details onToggle={event => {

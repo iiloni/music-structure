@@ -29,6 +29,9 @@ static class Verification
                             listen.Marks.Any(m => m is { Kind: "timbre", Start: >= 30 and <= 34, DeltaHz: < 0 }),
                             "Return control needs the two texture changes.");
                         break;
+                    case "refinement":
+                        CheckRefinement(listen, fingerprint);
+                        break;
                     case "lanes":
                         CheckLanes(listen);
                         break;
@@ -37,6 +40,8 @@ static class Verification
                             "Gain step produced a musical event or no measured level change.");
                         Require(listen.Frames.All(f => f.Lanes!.Bpm is null && f.Lanes.Key is null),
                             "A single held chord and gain step established tempo or key.");
+                        Require(Refinement.Compute(listen.Frames.ToArray()).Marks.Length == 0,
+                            "Refinement marked the gain step or held chord.");
                         break;
                     case "gap":
                         Require(listen.Marks.ToArray() is [{ Kind: "gap", Start: >= 13.99, End: >= 17.99 and <= 18.01 }],
@@ -58,7 +63,7 @@ static class Verification
             var timedFrame = delayed.Frames.Single();
             Require(timedFrame.ClockEndMs == 250 && timedFrame.PacketReadMs == 2_300,
                 "Packet read time failed to preserve the simulated capture delay.");
-            Console.WriteLine("PASS: deterministic fixture controls, packet sequence reset and timing probe.");
+            Console.WriteLine("PASS: deterministic fixture controls, packet sequence reset, timing probe and refinement.");
             return 0;
         }
         catch (InvalidOperationException ex)
@@ -66,6 +71,34 @@ static class Verification
             Console.Error.WriteLine($"FAIL: {ex.Message}");
             return 1;
         }
+    }
+
+    static void CheckRefinement(Listen listen, string original)
+    {
+        var frames = listen.Frames.ToArray();
+        var refined = Refinement.Compute(frames);
+        Require(JsonSerializer.Serialize(refined, Wire.Json) ==
+            JsonSerializer.Serialize(Refinement.Compute(frames), Wire.Json), "Refinement was nondeterministic.");
+        Require(Fingerprint(listen) == original, "Refinement modified the original listen.");
+        var families = refined.Marks.Where(mark => mark.Kind == "repeat").ToArray();
+        Require(families is [{ Family: "A", Occurrences: { Length: 3 } }], "Expected one family with three occurrences.");
+        var occurrences = families.Single().Occurrences!;
+        foreach (var (span, start, end) in occurrences.Zip(new[] { (0.0, 12.0), (22.5, 34.5), (46.5, 58.5) },
+            (span, expected) => (span, expected.Item1, expected.Item2)))
+        {
+            Require(Math.Abs(span.Start - start) <= .5 && Math.Abs(span.End - end) <= .5,
+                "A refined repeat endpoint missed the planted passage by more than 0.5 s.");
+        }
+        Require(occurrences.All(span => span.End <= 58.5) &&
+            listen.Marks.Any(mark => mark is { Kind: "gap", Start: 58.5, End: 62.5 }),
+            "Refinement used the planted repeat after the gap.");
+        var boundaries = refined.Marks.Where(mark => mark.Kind == "timbre").Select(mark => mark.Start).ToArray();
+        Require(boundaries.SequenceEqual(new[] { 12.0, 22.5, 34.5, 46.5 }),
+            "Refinement did not find the four planted texture boundaries.");
+        Require(listen.Marks.Count(mark => mark.Kind == "timbre") < boundaries.Length,
+            "The refinement fixture needs a boundary missed by the original pass.");
+        Console.WriteLine("  refined A: " + string.Join(", ", occurrences.Select(span => $"{span.Start:F2}–{span.End:F2}s")));
+        Console.WriteLine("  refined texture boundaries: " + string.Join(", ", boundaries.Select(time => $"{time:F2}s")));
     }
 
     static void CheckLanes(Listen listen)

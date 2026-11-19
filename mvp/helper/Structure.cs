@@ -1,7 +1,13 @@
 namespace MusicStructure;
 
 record Mark(int Id, string Kind, double Start, double End, string Detail, double? OtherStart = null,
-    double? OtherEnd = null, double? Score = null, double? DeltaHz = null, double? DetectedAt = null);
+    double? OtherEnd = null, double? Score = null, double? DeltaHz = null, double? DetectedAt = null)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Family { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Passage[]? Occurrences { get; init; }
+}
 
 sealed class Structure(Action<Mark> publish, Func<int> nextId)
 {
@@ -136,11 +142,17 @@ sealed class Structure(Action<Mark> publish, Func<int> nextId)
         {
             Feature first = history[a + k], second = history[b + k];
             if (!first.Audible || !second.Audible) return 0;
-            double similarity = 0;
-            for (int p = 0; p < 12; p++) similarity += first.Chroma[p] * second.Chroma[p];
+            double similarity = ChromaSimilarity(first, second);
             if (similarity >= .82) aligned++;
             total += similarity;
         }
         return aligned >= .8 * length ? Math.Min(1, total / length) : 0;
     }
+    internal static double ChromaSimilarity(Feature first, Feature second)
+    {
+        double similarity = 0;
+        for (int p = 0; p < 12; p++) similarity += first.Chroma[p] * second.Chroma[p];
+        return similarity;
+    }
+
 }

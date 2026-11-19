@@ -9,9 +9,10 @@ export interface Frame {
   index: number; start: number; end: number; clockEndMs: number | null; packetReadMs?: number; segment: number;
   rmsDb: number; centroidHz: number; valid: boolean; audible: boolean; mel: number[]; chroma: number[]; lanes?: LaneFrame;
 }
-export interface Mark {
+export interface Passage { start: number; end: number }
+export interface Mark extends Passage {
   id: number; kind: "repeat" | "timbre" | "gap" | "event";
-  start: number; end: number; detail: string;
+  detail: string; family?: string; occurrences?: Passage[];
   otherStart: number | null; otherEnd: number | null; score: number | null;
   deltaHz: number | null; detectedAt: number | null;
 }
@@ -21,15 +22,17 @@ export interface Counters {
   discontinuities: number; timestampErrors: number; missingSeconds: number; maxGapSeconds: number;
   gapsOver250Ms: number; features: number; meanFeatureComputeMs: number;
 }
+export interface RefinedMap extends Passage { version: string; marks: Mark[] }
 export interface Batch {
   version: 1; analysisVersion: string; sessionId: string; sequence: number;
   state: "ready" | "waiting" | "capturing" | "loading" | "stopping" | "stopped" | "unavailable";
   status: string; mode: "spotify" | "fixture" | "replay" | null; source: string | null;
   elapsed: number; historyStart: number; inputDb: number | null; counters: Counters;
   frames: Frame[]; marks: Mark[] | null; sources: Source[] | null; snapshot: boolean; windowsCapture: boolean;
+  refining: boolean; refined: RefinedMap | null;
 }
 export type MapState = Batch & { marks: Mark[]; sources: Source[] };
-type Command = { action: "start" | "stop" | "new" | "sources"; mode?: string; fixture?: string; pid?: number; started?: string };
+type Command = { action: "start" | "stop" | "new" | "sources" | "refine"; sessionId?: string; mode?: string; fixture?: string; pid?: number; started?: string };
 type Clock = { t0: number; t1: number; t2: number };
 type Alignment = { offset: number; uncertainty: number; received: number };
 

@@ -26,6 +26,23 @@ export function displayBrightness(frames: readonly Frame[], smooth: boolean) {
   });
 }
 
+export function centeredBrightness(frames: readonly Frame[]) {
+  return frames.map((frame, index) => {
+    if (!frame.audible || !frame.valid) return null;
+    let total = Math.log1p(frame.centroidHz / offsetHz), count = 1;
+    for (const direction of [-1, 1]) {
+      for (let offset = 1; offset <= 2; offset++) {
+        const other = frames[index + direction * offset];
+        if (!other?.audible || !other.valid || other.segment !== frame.segment ||
+            other.index !== frame.index + direction * offset) break;
+        total += Math.log1p(other.centroidHz / offsetHz);
+        count++;
+      }
+    }
+    return total / count;
+  });
+}
+
 export function brightnessRange(contour: readonly (number | null)[], scale: TimbreScale): [number, number] {
   if (scale === "fixed") return fixedRange;
   const audible = contour.filter(point => point !== null);

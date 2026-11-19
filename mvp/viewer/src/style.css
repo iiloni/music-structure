@@ -185,3 +185,7 @@ meter::-webkit-meter-optimum-value { border-radius: 10px; background: #218264; }
   .lab-toolbar, .lab-inspector { padding-left: 12px; padding-right: 12px; }
   .lab-lane-name i { margin-right: 3px; }
 }
+
+.comparison { margin-left: auto; }
+.comparison [role="group"] { display: flex; gap: 3px; }
+.comparison button[aria-pressed="true"] { background: #aeaeff; border-color: #aeaeff; color: #18264c; }

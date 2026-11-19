@@ -17,6 +17,8 @@ sealed class Session
     string state = "ready", status = "Choose Spotify or open a fixture.";
     long stateRevision, sourceRevision;
     Source[] sources = [];
+    RefinedMap? refined;
+    bool refining;
 
     public void Refresh()
     {
@@ -38,7 +40,7 @@ sealed class Session
     {
         lock (gate)
         {
-            if (running is not null) throw new InvalidOperationException("Stop the current capture first.");
+            if (running is not null || refining) throw new InvalidOperationException("Wait for the current operation to finish.");
             Source? target = null;
             string label;
             if (mode == "spotify")
@@ -54,6 +56,7 @@ sealed class Session
                 label = fixture!;
             }
 
+            refined = null;
             stop = new CancellationTokenSource();
             var token = stop.Token;
             double epoch = mode == "replay" ? 0 : Clock.Milliseconds;
@@ -203,6 +206,35 @@ sealed class Session
         }
     }
 
+    public async Task Refine(string? sessionId, CancellationToken token)
+    {
+        Feature[] snapshot;
+        lock (gate)
+        {
+            if (listen is null || listen.Id != sessionId || running is not null ||
+                state is not ("stopped" or "unavailable") || listen.Frames.Count == 0)
+                throw new InvalidOperationException("Stop capture and review a listen before refining.");
+            if (refining || refined is not null) return;
+            snapshot = listen.Frames.ToArray();
+            refining = true;
+            stateRevision++;
+        }
+
+        try
+        {
+            var result = await Task.Run(() => Refinement.Compute(snapshot, token), token);
+            lock (gate) refined = result;
+        }
+        finally
+        {
+            lock (gate)
+            {
+                refining = false;
+                stateRevision++;
+            }
+        }
+    }
+
     public Batch? Read(Cursor cursor)
     {
         lock (gate)
@@ -220,7 +252,7 @@ sealed class Session
                 listen?.Mode, listen?.Source, listen?.Elapsed ?? 0, listen?.HistoryStart ?? 0, listen?.InputDb,
                 listen?.Counters ?? new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), frames, marks, snapshot,
                 cursor.Sources != sourceRevision ? sources : null,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) && Environment.Is64BitProcess);
+                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) && Environment.Is64BitProcess, refining, refined);
             if (snapshot) cursor.Frame = 0;
             if (frames.Length > 0) cursor.Frame = frames[^1].Index;
             cursor.Session = id;

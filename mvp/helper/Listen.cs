@@ -5,7 +5,8 @@ record Counters(long Packets, long Frames, long QueueDroppedPackets, long QueueD
     long GapsOver250Ms, long Features, double MeanFeatureComputeMs);
 record Batch(int Version, string AnalysisVersion, string SessionId, long Sequence, string State,
     string Status, string? Mode, string? Source, double Elapsed, double HistoryStart, double? InputDb,
-    Counters Counters, Feature[] Frames, Mark[]? Marks, bool Snapshot, Source[]? Sources, bool WindowsCapture);
+    Counters Counters, Feature[] Frames, Mark[]? Marks, bool Snapshot, Source[]? Sources, bool WindowsCapture,
+    bool Refining, RefinedMap? Refined);
 
 sealed class Listen(double startMs, string mode, string source)
 {

@@ -2,7 +2,7 @@ namespace MusicStructure;
 
 static class Fixtures
 {
-    public static readonly string[] Names = ["return", "gain", "gap", "lanes"];
+    public static readonly string[] Names = ["return", "gain", "gap", "lanes", "refinement"];
     public const int BlockFrames = Packet.Rate / 20;
     static readonly int[][] Return =
     [
@@ -29,6 +29,7 @@ static class Fixtures
     public static IEnumerable<Packet> Packets(string name)
     {
         if (name == "lanes") return LaneStudy();
+        if (name == "refinement") return RefinementStudy();
         return ExistingFixture(name);
     }
 
@@ -124,5 +125,51 @@ static class Fixtures
             yield return new Packet(block, elapsed * 1000, stereo);
         }
     }
+    static IEnumerable<Packet> RefinementStudy()
+    {
+        for (int block = 0; block < 1490; block++)
+        {
+            double elapsed = block / 20.0;
+            if (elapsed >= 58.5 && elapsed < 62.5)
+            {
+                if (block % 5 == 0)
+                    yield return new Packet(block, elapsed * 1000 + 250, [], Interruption: "Simulated device interruption");
+                continue;
+            }
+
+            var (start, texture) = elapsed switch
+            {
+                < 12 => (0.0, 0),
+                < 22.5 => (12.0, 1),
+                < 34.5 => (22.5, 0),
+                < 46.5 => (34.5, 2),
+                < 58.5 => (46.5, 0),
+                _ => (62.5, 0)
+            };
+            var notes = (texture == 0 ? Return : texture == 1 ? Bridge : EFlatProgression)[(int)((elapsed - start) / 2)];
+            var frequencies = notes.Select(note => 440 * Math.Pow(2, (note - 69) / 12.0)).ToArray();
+            var stereo = new short[BlockFrames * Packet.Channels];
+            for (int sample = 0; sample < BlockFrames; sample++)
+            {
+                double time = elapsed - start + (double)sample / Packet.Rate;
+                double signal = 0;
+                foreach (double hz in frequencies)
+                {
+                    double phase = 2 * Math.PI * hz * time;
+                    signal += Math.Sin(phase) + .12 * Math.Sin(2 * phase);
+                }
+                // A fixed upper-register layer changes the texture independently of the chords.
+                double angle = 2 * Math.PI * time;
+                if (texture == 1) signal += .9 * (Math.Sin(1800 * angle) + Math.Sin(2700 * angle) +
+                    Math.Sin(4050 * angle) + Math.Sin(5220 * angle));
+                if (texture == 2) signal += .75 * (Math.Sin(2300 * angle) + Math.Sin(3150 * angle) +
+                    Math.Sin(4960 * angle) + Math.Sin(6050 * angle));
+                short value = (short)Math.Clamp(signal * 2800, short.MinValue, short.MaxValue);
+                stereo[sample * 2] = stereo[sample * 2 + 1] = value;
+            }
+            yield return new Packet(block, elapsed * 1000, stereo);
+        }
+    }
+
 
 }

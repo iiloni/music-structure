@@ -21,6 +21,12 @@ The threshold set is `score-1`. Timbre uses a 15.5 dB spectral-shape threshold w
 
 The `score-2` analysis adds events, tempo, tonality and chords. The **Pulse and harmony** fixture covers a change of pulse and key, two short accents, silence and an interruption. The checks found one transient interval at each accent, eight expected chord labels at sampled times, 120 BPM and C major from 14–23 seconds, and 90 BPM and E-flat major from 34–44 seconds. Beat marks agreed with the generated pulse. Silence and the isolated post-gap note yielded unknown harmony and tempo. Mixed-window tonality reported C minor briefly around the modulation, so transition timestamps and labels should be treated as estimates.
 
+## Stopped-score refinement
+
+The `refine-1` pass on **Three returns** grouped 0–12, 22–34.5 and 46–58.5 seconds as family A. Its endpoints were within 0.5 seconds of the planted spans. It found texture boundaries at 12, 22.5, 34.5 and 46.5 seconds. The original pass marked the latter two texture changes and showed two overlapping repeat pairs. The post-gap copy stayed outside the family. The result was deterministic and the original data fingerprint was preserved. The gain control stayed free of refined annotations.
+
+The refinement fixture uses clean, fixed-tempo passages. These results establish behavior under the generated control. Use familiar Spotify songs to evaluate boundary placement and repeating passages in actual listening.
+
 ## Physical measurements pending
 
 | Trial | Status |
