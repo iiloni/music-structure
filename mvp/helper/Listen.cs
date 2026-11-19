@@ -9,7 +9,7 @@ record Batch(int Version, string AnalysisVersion, string SessionId, long Sequenc
 
 sealed class Listen(double startMs, string mode, string source)
 {
-    public const string AnalysisVersion = "score-1";
+    public const string AnalysisVersion = "score-2";
     public const double HistorySeconds = 600;
     public string Id { get; } = Guid.NewGuid().ToString("N");
     public string Mode { get; } = mode;
@@ -28,6 +28,7 @@ sealed class Listen(double startMs, string mode, string source)
     readonly AudioFeatures features = new();
     readonly Dictionary<int, Mark> marks = new();
     Structure? structure;
+    AdditionalLanes? additional;
     Mark? openGap;
     int segment, markId;
     double? packetEndMs, packetStampEndMs;
@@ -85,6 +86,7 @@ sealed class Listen(double startMs, string mode, string source)
         packets++;
         pcmFrames += packet.Frames;
         structure ??= new Structure(Publish, () => ++markId);
+        additional ??= new AdditionalLanes(Publish, () => ++markId);
         double computeStart = Clock.Milliseconds;
         long before = featureCount;
         features.Add(packet.Samples, (start, end, rms, centroid, audible, mel, chroma) =>
@@ -97,11 +99,12 @@ sealed class Listen(double startMs, string mode, string source)
             {
                 PacketReadMs = includePaintClock ? packet.PacketReadMs : null
             };
+            frame = frame with { Lanes = additional.Add(frame, segmentStart) };
             Frames.Enqueue(frame);
             InputDb = rms;
             coverageEnd = sessionEnd;
             structure.Add(frame);
-        });
+        }, additional.ObservePulse);
         // Account for all pipeline work, even for packets that do not themselves emit a feature.
         featureComputeMs += Clock.Milliseconds - computeStart;
         if (featureCount > before)
@@ -120,6 +123,7 @@ sealed class Listen(double startMs, string mode, string source)
             openGap = new Mark(++markId, "gap", coverageEnd, end, reason);
             features.Reset();
             structure?.Reset();
+            additional?.Reset();
             segment++;
         }
         else openGap = openGap with { End = end };

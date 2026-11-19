@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Frame, MapState, Mark } from "./wire";
+import { drawLabLanes, laneDefinitions, type Lane, type LaneRow } from "./LabLanes";
 import { brightnessHz, brightnessRange, displayBrightness, type TimbreScale } from "./timbre";
 
 export function time(seconds: number, precision = false) {
@@ -10,19 +11,29 @@ export function time(seconds: number, precision = false) {
 }
 
 export function markName(mark: Mark) {
-  return mark.kind === "repeat" ? "Repeat" : mark.kind === "gap" ? "Gap" : "Texture change";
+  return { repeat: "Repeat", gap: "Gap", timbre: "Texture change", event: "Transient event" }[mark.kind];
 }
 
 const repeatColor = "#aeaeff", contourColor = "#9cebd6", markerColor = "#ffab86";
 const ink = "#18264c", grid = "#36446e", faint = "#aab8d6";
-const top = 5, repeatBaseline = 123, contourTop = 163, contourBottom = 283, chartHeight = 340;
+const top = 5, repeatBaseline = 123, contourTop = 163, contourBottom = 283;
 
-export function Score({ map, selected, select, timbreScale, smooth }: {
-  map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale; smooth: boolean;
+export function Score({ map, selected, select, timbreScale, smooth, lanes }: {
+  map?: MapState; selected?: Mark; select: (id: number) => void; timbreScale: TimbreScale; smooth: boolean; lanes: readonly Lane[];
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(0);
+  const [inspection, setInspection] = useState<{ session: string; seconds: number }>();
+  let timelineBottom = 303;
+  const rows: LaneRow[] = [];
+  for (const lane of laneDefinitions) {
+    if (!lanes.includes(lane.id)) continue;
+    rows.push({ ...lane, top: timelineBottom });
+    timelineBottom += lane.height;
+  }
+  const chartHeight = timelineBottom + 37;
+  const eventLane = rows.find(row => row.id === "event");
   const from = map?.historyStart ?? 0;
   const last = map?.elapsed ?? 0;
   const plotWidth = Math.max(1, width - 30);
@@ -35,7 +46,13 @@ export function Score({ map, selected, select, timbreScale, smooth }: {
   const axisPositions = [contourTop, (contourTop + contourBottom) / 2, contourBottom];
   const marks = map?.marks;
   const repeats = marks?.filter(mark => mark.otherEnd !== null && mark.otherEnd >= from) ?? [];
-  const events = marks?.filter(mark => mark.kind !== "repeat") ?? [];
+  const events = marks?.filter(mark => mark.kind !== "repeat" && (mark.kind !== "event" || eventLane)) ?? [];
+  const pinned = map && inspection?.session === map.sessionId ? inspection.seconds : undefined;
+  const inspectedAt = Math.max(from, Math.min(last, pinned ?? last));
+  const tail = frames?.at(-1);
+  const currentGap = tail && events.some(mark => mark.kind === "gap" && mark.start >= tail.end - .001 && mark.end >= last - .001);
+  const inspected = inspectedAt === last && tail && last - tail.end <= .26 && !currentGap ? tail :
+    frames?.find(frame => frame.start <= inspectedAt && frame.end > inspectedAt);
 
   function arc(mark: Mark) {
     const a = x((mark.start + mark.end) / 2);
@@ -79,23 +96,23 @@ export function Score({ map, selected, select, timbreScale, smooth }: {
     const tick = candidates.find(value => value * plotWidth / (horizon - from) >= 57) ?? 120;
     for (let second = Math.ceil(from / tick) * tick; second <= horizon; second += tick) {
       const at = x(second);
-      line(at, 14, at, 304, grid);
+      line(at, 14, at, timelineBottom + 1, grid);
       context.textAlign = at < 22 ? "left" : at > width - 22 ? "right" : "center";
-      context.fillText(time(second), at, 321);
+      context.fillText(time(second), at, timelineBottom + 18);
     }
-    for (const y of [repeatBaseline, contourTop, (contourTop + contourBottom) / 2, contourBottom, 303])
+    for (const y of [repeatBaseline, contourTop, (contourTop + contourBottom) / 2, contourBottom, 303, ...rows.map(row => row.top + row.height)])
       line(14, y, width - 16, y, grid);
 
     for (const mark of events.filter(event => event.kind === "gap")) {
       const a = x(mark.start), b = Math.max(a + 2, x(mark.end));
       context.save();
       context.beginPath();
-      context.rect(a, top, b - a, 299);
+      context.rect(a, top, b - a, timelineBottom - top);
       context.clip();
       context.fillStyle = selected?.id === mark.id ? "#5d597a" : "#2b395d";
-      context.fillRect(a, top, b - a, 299);
-      for (let stripe = a - 310; stripe < b; stripe += 7)
-        line(stripe, 303, stripe + 300, 3, "#5c6989");
+      context.fillRect(a, top, b - a, timelineBottom - top);
+      for (let stripe = a - timelineBottom; stripe < b; stripe += 7)
+        line(stripe, timelineBottom, stripe + timelineBottom, 0, "#5c6989");
       context.restore();
     }
 
@@ -105,7 +122,7 @@ export function Score({ map, selected, select, timbreScale, smooth }: {
       if (chosen) {
         context.fillStyle = "#aeaeff24";
         for (const [start, end] of [[mark.start, mark.end], [mark.otherStart!, mark.otherEnd!]])
-          context.fillRect(x(start), top, x(end) - x(start), 299);
+          context.fillRect(x(start), top, x(end) - x(start), timelineBottom - top);
       }
       context.strokeStyle = repeatColor;
       context.globalAlpha = chosen || !selected ? 1 : .45;
@@ -152,19 +169,31 @@ export function Score({ map, selected, select, timbreScale, smooth }: {
     }
     flush();
 
+    drawLabLanes(context, rows, frames ?? [], x);
+    if (eventLane) {
+      for (const mark of events.filter(event => event.kind === "event")) {
+        context.fillStyle = selected?.id === mark.id ? "#ffaf7970" : "#ffaf7935";
+        context.fillRect(x(mark.start), eventLane.top + 5, Math.max(2, x(mark.end) - x(mark.start)), eventLane.height - 10);
+      }
+    }
     context.lineWidth = 1;
+    if (rows.length && pinned !== undefined) {
+      context.setLineDash([3, 4]);
+      line(x(inspectedAt), top, x(inspectedAt), timelineBottom, "#e0e7f7");
+      context.setLineDash([]);
+    }
     for (const mark of events.filter(event => event.kind === "timbre")) {
       const chosen = selected?.id === mark.id;
       line(x(mark.start), contourTop, x(mark.start), 302, chosen ? markerColor : "#bd8c81");
     }
     if (last > 0) {
-      line(x(last), top, x(last), 303, markerColor);
+      line(x(last), top, x(last), timelineBottom, markerColor);
       context.fillStyle = markerColor;
       context.fillRect(x(last) - 2, top, 4, 10);
     }
   });
 
-  return <div className="plot">
+  return <><div className="plot" style={{ height: chartHeight }}>
     <div className="plot-lanes" aria-hidden="true">
       <span className="repeat-lane"><i />Repeats</span>
       <span className="timbre-lane"><i />Timbre</span>
@@ -174,10 +203,13 @@ export function Score({ map, selected, select, timbreScale, smooth }: {
           {hz >= 1000 ? `${(hz / 1000).toFixed(2).replace(/\.?0+$/, "")} kHz` : `${hz} Hz`}
         </span>;
       })}
-      <span className="ruler-lane">Elapsed</span>
+      {rows.map(row => <span className="lab-lane-name" key={row.id} style={{ top: row.top + row.height / 2 }}>
+        <i style={{ background: row.color }} />{row.label}
+      </span>)}
+      <span className="ruler-lane" style={{ top: timelineBottom + 6 }}>Elapsed</span>
     </div>
     <div className="plot-field" ref={wrapper}>
-      <canvas ref={canvas} aria-hidden="true" />
+      <canvas ref={canvas} aria-hidden="true" style={{ height: chartHeight }} />
       <div className="plot-controls">
         {width > 0 && repeats.map(mark => {
           const { a, b, labelY } = arc(mark);
@@ -186,10 +218,11 @@ export function Score({ map, selected, select, timbreScale, smooth }: {
             aria-pressed={selected?.id === mark.id} onFocus={() => select(mark.id)} onClick={() => select(mark.id)}>↔ Repeat</button>;
         })}
         {width > 0 && events.map(mark => <button key={mark.id} className={`pin ${mark.kind}-pin`}
-          style={{ left: x(mark.start), top: mark.kind === "gap" ? 145 : 292 }}
+          style={{ left: x(mark.start), top: mark.kind === "gap" ? 145 :
+            mark.kind === "event" && eventLane ? eventLane.top + eventLane.height / 2 : 292 }}
           aria-label={`${markName(mark)} at ${time(mark.start)}`}
           aria-pressed={selected?.id === mark.id} onFocus={() => select(mark.id)} onClick={() => select(mark.id)}>
-          {mark.kind === "gap" ? "Gap" : "◆"}
+          {mark.kind === "gap" ? "Gap" : mark.kind === "event" ? "✦" : "◆"}
         </button>)}
       </div>
       {!frames?.length && <div className="plot-empty">
@@ -197,5 +230,21 @@ export function Score({ map, selected, select, timbreScale, smooth }: {
         <span>Start Spotify capture or open a generated example.</span>
       </div>}
     </div>
-  </div>;
+  </div>
+  {rows.length > 0 && <div className="lab-inspector">
+    <label><span>Inspect at {time(inspectedAt, true)}</span>
+      <input type="range" min={from} max={last} step={.25} value={inspectedAt} disabled={!frames?.length}
+        aria-valuetext={time(inspectedAt, true)}
+        onChange={event => map && setInspection({ session: map.sessionId, seconds: Number(event.target.value) })} />
+    </label>
+    {pinned !== undefined && <button type="button" onClick={() => setInspection(undefined)}>Follow live</button>}
+    <dl>
+      {lanes.includes("tempo") && <><dt>Tempo</dt><dd>{inspected?.lanes?.bpm == null ? "Unknown" :
+        `${Math.round(inspected.lanes.bpm)} BPM${(inspected.lanes.tempoFit ?? 0) < .6 ? " (tentative)" : ""}`}</dd></>}
+      {lanes.includes("key") && <><dt>Tonality</dt><dd>{inspected?.lanes?.key?.label ?? "Unknown"}</dd></>}
+      {lanes.includes("chord") && <><dt>Chord</dt><dd>{inspected?.lanes?.chord?.label ?? "Unknown"}</dd></>}
+      {lanes.includes("event") && <><dt>Events</dt><dd>{events.filter(mark => mark.kind === "event").length} visible</dd></>}
+    </dl>
+  </div>}
+  </>;
 }

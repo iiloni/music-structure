@@ -17,6 +17,10 @@ The Windows x64 package builds and the generated controls pass. The physical Spo
 
 The threshold set is `score-1`. Timbre uses a 15.5 dB spectral-shape threshold with sustained evidence. Repeats use an eight-second chroma window and a .91 similarity floor, with alignment, movement and local contrast checks. The generated controls informed these settings. With real music, an eight-second fixed window can miss shorter or tempo-shifted returns. The fixed centroid scale is the default. The viewer also offers a relative scale for inspecting smaller brightness changes.
 
+## Listening lab extension
+
+The `score-2` analysis adds events, tempo, tonality and chords. The **Pulse and harmony** fixture covers a change of pulse and key, two short accents, silence and an interruption. The checks found one transient interval at each accent, eight expected chord labels at sampled times, 120 BPM and C major from 14–23 seconds, and 90 BPM and E-flat major from 34–44 seconds. Beat marks agreed with the generated pulse. Silence and the isolated post-gap note yielded unknown harmony and tempo. Mixed-window tonality reported C minor briefly around the modulation, so transition timestamps and labels should be treated as estimates.
+
 ## Physical measurements pending
 
 | Trial | Status |

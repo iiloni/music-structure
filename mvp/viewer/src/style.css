@@ -156,3 +156,32 @@ meter::-webkit-meter-optimum-value { border-radius: 10px; background: #218264; }
 .timing dd { margin: 0; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
 .scale-control input { accent-color: var(--mint); }
 .scale-control input:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+.lab-toolbar, .lab-inspector {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  padding: 8px 20px; color: #bac5e0; font-size: .8rem;
+}
+.lab-toolbar { border-bottom: 1px solid #36446e; }
+.lab-toolbar button, .lab-inspector button {
+  background: transparent; border: 1px solid #617195; border-radius: 4px;
+  padding: 4px 8px; color: #f5f6ff;
+}
+.lab-toolbar button:hover, .lab-inspector button:hover { background: #25365e; }
+.lab-options, .lab-options label { display: flex; align-items: center; gap: 5px; }
+.lab-options { flex-wrap: wrap; gap: 6px 14px; }
+.lab-options[hidden] { display: none; }
+.lab-options input { accent-color: var(--lane-color); }
+.lab-toolbar :focus-visible, .lab-inspector :focus-visible {
+  outline: 2px solid #fff; outline-offset: 3px;
+}
+.lab-lane-name { transform: translateY(-50%); white-space: nowrap; }
+.event-pin { color: #ffaf79; }
+.lab-inspector { border-top: 1px solid #36446e; }
+.lab-inspector label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.lab-inspector input { width: 125px; accent-color: var(--mint); }
+.lab-inspector dl { display: flex; gap: 3px 8px; flex-wrap: wrap; margin: 0; }
+.lab-inspector dd { margin: 0 8px 0 0; color: #f5f6ff; }
+@media (max-width: 680px) {
+  .lab-toolbar, .lab-inspector { padding-left: 12px; padding-right: 12px; }
+  .lab-lane-name i { margin-right: 3px; }
+}

@@ -29,9 +29,14 @@ static class Verification
                             listen.Marks.Any(m => m is { Kind: "timbre", Start: >= 30 and <= 34, DeltaHz: < 0 }),
                             "Return control needs the two texture changes.");
                         break;
+                    case "lanes":
+                        CheckLanes(listen);
+                        break;
                     case "gain":
                         Require(listen.Marks.Count == 0 && listen.Frames.Last().RmsDb - listen.Frames.First().RmsDb > 10,
                             "Gain step produced a musical event or no measured level change.");
+                        Require(listen.Frames.All(f => f.Lanes!.Bpm is null && f.Lanes.Key is null),
+                            "A single held chord and gain step established tempo or key.");
                         break;
                     case "gap":
                         Require(listen.Marks.ToArray() is [{ Kind: "gap", Start: >= 13.99, End: >= 17.99 and <= 18.01 }],
@@ -61,6 +66,39 @@ static class Verification
             Console.Error.WriteLine($"FAIL: {ex.Message}");
             return 1;
         }
+    }
+
+    static void CheckLanes(Listen listen)
+    {
+        var events = listen.Marks.Where(mark => mark.Kind == "event").ToArray();
+        Require(events is [{ Start: 10, End: 10.5 }, { Start: 38, End: 38.5 }],
+            "Each short accent should produce one event, without marking the regular beats.");
+        Require(listen.Frames.Where(f => f.Start >= 7 && f.End <= 23)
+            .All(f => f.Lanes!.Bpm is >= 118 and <= 122), "A short accent perturbed the established 120 BPM pulse.");
+        foreach (var (start, end, pace, key) in new[] { (14, 23, 120, "C major"), (34, 44, 90, "E♭ major") })
+        {
+            var frames = listen.Frames.Where(f => f.Start >= start && f.End <= end).ToArray();
+            Require(frames.Count(f => f.Lanes!.Bpm is double bpm && Math.Abs(pace - bpm) <= 2) >= frames.Length * .8,
+                $"Expected a stable {pace} BPM at {start}–{end}s.");
+            Require(frames.Count(f => f.Lanes!.Key?.Label == key) >= frames.Length * .75,
+                $"Expected {key} tonal evidence at {start}–{end}s.");
+            var beats = frames.SelectMany(f => f.Lanes!.Beats).ToArray();
+            Require(beats.Length >= (end - start) * pace / 60 * .65, $"Missing beat marks at {pace} BPM.");
+            Require(beats.Count(beat => Math.Abs(Math.IEEERemainder(beat, 60.0 / pace)) < .08) >= beats.Length * .85,
+                $"Beat phase did not agree with the {pace} BPM pulse.");
+            Console.WriteLine($"  {start}–{end}s: {pace} BPM, {key}, {beats.Length} beat marks.");
+        }
+        foreach (var (start, chord) in new[] { (2, "C"), (6, "F"), (10, "G"), (18, "Am"),
+                     (26, "E♭"), (30, "A♭"), (34, "B♭"), (42, "Cm") })
+        {
+            Require(listen.Frames.Single(f => f.Start == start).Lanes!.Chord?.Label == chord,
+                $"Expected chord {chord} at {start}s.");
+        }
+
+        Require(listen.Marks.Any(mark => mark is { Kind: "gap", Start: >= 51.99, End: >= 55.99 and <= 56.01 }) &&
+            listen.Frames.Where(f => f.Start >= 48).All(f =>
+                f.Lanes is { Chord: null, Key: null, Bpm: null } && f.Lanes.Beats.Length == 0),
+            "Estimates should be unknown during silence and after a gap into a single note.");
     }
 
     static string Fingerprint(Listen listen) =>

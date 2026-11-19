@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 
+export interface PitchEstimate { label: string; fit: number }
+export interface LaneFrame {
+  chord: PitchEstimate | null; key: PitchEstimate | null;
+  bpm: number | null; tempoFit: number | null; onsets: number[]; beats: number[];
+}
 export interface Frame {
   index: number; start: number; end: number; clockEndMs: number | null; packetReadMs?: number; segment: number;
-  rmsDb: number; centroidHz: number; valid: boolean; audible: boolean; mel: number[]; chroma: number[];
+  rmsDb: number; centroidHz: number; valid: boolean; audible: boolean; mel: number[]; chroma: number[]; lanes?: LaneFrame;
 }
 export interface Mark {
-  id: number; kind: "repeat" | "timbre" | "gap";
+  id: number; kind: "repeat" | "timbre" | "gap" | "event";
   start: number; end: number; detail: string;
   otherStart: number | null; otherEnd: number | null; score: number | null;
   deltaHz: number | null; detectedAt: number | null;

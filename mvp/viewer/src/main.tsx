@@ -3,11 +3,12 @@ import { createRoot } from "react-dom/client";
 import "@fontsource/instrument-serif/latin-400.css";
 import "@fontsource-variable/instrument-sans/wght.css";
 import { Score, markName, time } from "./Score";
+import { laneDefinitions, type Lane } from "./LabLanes";
 import type { TimbreScale } from "./timbre";
 import { useHelper, type Mark } from "./wire";
 import "./style.css";
 
-const fixtures = { return: "A–B–A study", gain: "Gain step", gap: "Interrupted listen" };
+const fixtures = { return: "A–B–A study", gain: "Gain step", gap: "Interrupted listen", lanes: "Pulse and harmony" };
 type Fixture = keyof typeof fixtures;
 type PaintReading = { index: number; ms: number | null; timestampToPacketReadMs: number | null; afterPacketReadMs: number | null; error: number };
 const active = new Set(["waiting", "capturing", "loading", "stopping"]);
@@ -17,7 +18,7 @@ function markTimes(mark: Mark) {
   const range = `${first}–${time(mark.end, true)}`;
   if (mark.otherStart !== null && mark.otherEnd !== null)
     return `${range} and ${time(mark.otherStart, true)}–${time(mark.otherEnd, true)}`;
-  return mark.kind === "gap" ? range : first;
+  return mark.kind === "gap" || mark.kind === "event" ? range : first;
 }
 
 function App() {
@@ -25,13 +26,17 @@ function App() {
   const [chosenSource, chooseSource] = useState<number>();
   const [timbreScale, setTimbreScale] = useState<TimbreScale>("fixed");
   const [smooth, setSmooth] = useState(true);
+  const [labOpen, setLabOpen] = useState(false);
+  const [lanes, setLanes] = useState<Lane[]>(laneDefinitions.map(lane => lane.id));
   const [showTiming, setShowTiming] = useState(false);
   const [timing, setTiming] = useState<{ session: string; reading: PaintReading }>();
   const [fixture, chooseFixture] = useState<Fixture>("return");
   const [selection, setSelection] = useState<{ session?: string; id: number }>();
   const [setup, setSetup] = useState("");
   const latency = useRef({ session: "", index: 0, readings: [] as PaintReading[] });
-  const selected = map?.marks.find(mark => selection?.session === map.sessionId && mark.id === selection?.id);
+  const visibleLanes = labOpen ? lanes : [];
+  const visibleMarks = map?.marks.filter(mark => mark.kind !== "event" || visibleLanes.includes("event"));
+  const selected = visibleMarks?.find(mark => selection?.session === map?.sessionId && mark.id === selection?.id);
   const source = map?.sources.find(item => item.pid === chosenSource) ?? map?.sources[0];
   const running = online && active.has(map?.state ?? "");
   const capturingSpotify = running && map?.mode === "spotify" && map.state !== "stopping";
@@ -107,6 +112,11 @@ function App() {
   const reading = timing?.session === map?.sessionId ? timing?.reading : undefined;
   const latest = map?.frames.at(-1);
 
+  function openFixture(mode: "replay" | "fixture") {
+    if (fixture === "lanes") setLabOpen(true);
+    send({ action: "start", mode, fixture });
+  }
+
   function select(id: number) {
     setSelection({ session: map?.sessionId, id });
   }
@@ -175,7 +185,19 @@ function App() {
             <span> / {map?.historyStart ? "Latest 10 min" : "Captured range"}</span>
           </div>
         </header>
-        <Score map={map} selected={selected} select={select} timbreScale={timbreScale} smooth={smooth}/>
+        <div className="lab-toolbar">
+          <button type="button" aria-expanded={labOpen} aria-controls="lab-options"
+            onClick={() => setLabOpen(open => !open)}>{labOpen ? "Hide listening lab" : "Show listening lab"}</button>
+          <div id="lab-options" className="lab-options" hidden={!labOpen} role="group" aria-label="Listening lab lanes">
+            {laneDefinitions.map(lane => <label key={lane.id} style={{ "--lane-color": lane.color } as React.CSSProperties}>
+              <input type="checkbox" checked={lanes.includes(lane.id)}
+                onChange={event => setLanes(current => event.target.checked
+                  ? [...current, lane.id] : current.filter(id => id !== lane.id))} />
+              {lane.label}
+            </label>)}
+          </div>
+        </div>
+        <Score map={map} selected={selected} select={select} timbreScale={timbreScale} smooth={smooth} lanes={visibleLanes}/>
         <div className="score-footer">
           <span title={map?.status}>{connection || map?.status}</span>
           <span>{map?.counters.features ?? 0} feature frames</span>
@@ -185,13 +207,13 @@ function App() {
       <section className="review" aria-label="Inspect and replay">
         <div className="annotations">
           <h2>Annotations</h2>
-          {map?.marks.length ? <ul className="annotation-list">
-            {map.marks.map(mark => <li key={mark.id}><button type="button" className={`annotation ${mark.kind}`}
+          {visibleMarks?.length ? <ul className="annotation-list">
+            {visibleMarks.map(mark => <li key={mark.id}><button type="button" className={`annotation ${mark.kind}`}
               aria-pressed={selected?.id === mark.id} onFocus={() => select(mark.id)} onClick={() => select(mark.id)}>
-              <span>{mark.kind === "repeat" ? "↔" : mark.kind === "gap" ? "▧" : "◆"} <b>{markName(mark)}</b></span>
+              <span>{mark.kind === "repeat" ? "↔" : mark.kind === "gap" ? "▧" : mark.kind === "event" ? "✦" : "◆"} <b>{markName(mark)}</b></span>
               <span>{markTimes(mark)}</span>
             </button></li>)}
-          </ul> : <p>Texture changes, returning passages and gaps appear here.</p>}
+          </ul> : <p>Detected changes, returning passages and gaps appear here.</p>}
         </div>
         <div className="inspector">
           <h2>Inspect</h2>
@@ -206,6 +228,7 @@ function App() {
                 First linked {((selected.detectedAt ?? selected.otherEnd!) - selected.otherStart!).toFixed(1)} s into the return.</p>}
               {selected.kind === "timbre" && <p>Brightness {selected.deltaHz! >= 0 ? "+" : ""}{Math.round(selected.deltaHz!)} Hz.
                 Spectral change {selected.score!.toFixed(1)} dB.</p>}
+              {selected.kind === "event" && <p>Peak spectral deviation {selected.score!.toFixed(1)} dB from the preceding texture.</p>}
               {selected.kind === "gap" && <p>{(selected.end - selected.start).toFixed(2)} s of missing coverage.</p>}
             </> : <p>Select a link or marker to see what changed and when.</p>}
           </div>
@@ -220,9 +243,9 @@ function App() {
             </select>
           </label>
           <button type="button" className="quiet" disabled={!online || running}
-            onClick={() => send({ action: "start", mode: "replay", fixture })}>Open replay</button>
+            onClick={() => openFixture("replay")}>Open replay</button>
           <button type="button" className="quiet" disabled={!online || running}
-            onClick={() => send({ action: "start", mode: "fixture", fixture })}>Run in real time</button>
+            onClick={() => openFixture("fixture")}>Run in real time</button>
         </div>
         <details onToggle={event => {
           setShowTiming(event.currentTarget.open);

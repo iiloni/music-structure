@@ -20,6 +20,7 @@ record Feature(long Index, double Start, double End, double? ClockEndMs, int Seg
 {
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public double? PacketReadMs { get; init; }
+    public LaneFrame? Lanes { get; init; }
 }
 
 sealed class AudioFeatures
@@ -32,6 +33,7 @@ sealed class AudioFeatures
     readonly double[] cos = new double[Size / 2], sin = new double[Size / 2];
     readonly int[] reverse = new int[Size], melBin = new int[Size / 2], pitch = new int[Size / 2];
     readonly double[] melFraction = new double[Size / 2], pitchFraction = new double[Size / 2];
+    readonly double[] previousSpectrum = new double[Bands];
     readonly double[] mel = new double[Bands], chroma = new double[12], powers = new double[Size / 2];
     readonly double[] bandSum = new double[Bands], pitchSum = new double[12];
     int sourceCount, samples, observations, audible, batch = 1;
@@ -74,6 +76,7 @@ sealed class AudioFeatures
     public void Reset()
     {
         Array.Clear(input);
+        Array.Clear(previousSpectrum);
         sourceCount = samples = 0;
         batch = 1;
         ClearBatch();
@@ -87,7 +90,7 @@ sealed class AudioFeatures
         sumPower = sumCentroid = 0;
     }
 
-    public void Add(short[] stereo, Action<double, double, double, double, bool, double[], double[]> emit)
+    public void Add(short[] stereo, Action<double, double, double, double, bool, double[], double[]> emit, Action<double, double> pulse)
     {
         for (int i = 0; i < stereo.Length; i += Packet.Channels)
         {
@@ -105,7 +108,7 @@ sealed class AudioFeatures
             }
             ring[samples % Size] = value;
             samples++;
-            if (samples >= Size && (samples - Size) % Hop == 0) Observe();
+            if (samples >= Size && (samples - Size) % Hop == 0) Observe(pulse);
 
             if (samples < ((long)batch * Rate + 3) / 4) continue;
             bool hasMusic = audible > 0 && audible * 2 >= observations;
@@ -119,7 +122,7 @@ sealed class AudioFeatures
         }
     }
 
-    void Observe()
+    void Observe(Action<double, double> pulse)
     {
         double energy = 0;
         for (int k = 0; k < Size; k++)
@@ -132,7 +135,13 @@ sealed class AudioFeatures
         energy /= Size;
         observations++;
         sumPower += energy;
-        if (energy < Math.Pow(10, SilenceDb / 10)) return;
+        double spectrumTime = (samples - Size / 2.0) / Rate;
+        if (energy < Math.Pow(10, SilenceDb / 10))
+        {
+            Array.Clear(previousSpectrum);
+            pulse(spectrumTime, 0);
+            return;
+        }
         audible++;
 
         for (int length = 2; length <= Size; length *= 2)
@@ -167,8 +176,15 @@ sealed class AudioFeatures
             if (band < Bands) mel[band] += melFraction[k] * power;
         }
         sumCentroid += moment / Math.Max(mass, 1e-12) * Rate / Size;
+        double flux = 0;
         for (int k = 0; k < Bands; k++)
+        {
             bandSum[k] += 10 * Math.Log10(Math.Max(1e-4, mel[k] / Math.Max(totalPower, 1e-12)));
+            double band = Math.Log(1 + .04 * Math.Sqrt(mel[k]));
+            flux += Math.Max(0, band - previousSpectrum[k]);
+            previousSpectrum[k] = band;
+        }
+        pulse(spectrumTime, flux);
 
         // Spectral peaks in the lower registers reduce leakage and upper harmonic bias.
         for (int k = 6; k <= 140; k++)
