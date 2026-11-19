@@ -29,3 +29,9 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Windows listening prototype
+/mvp/viewer/dist/
+/mvp/helper/bin/
+/mvp/helper/obj/
+/mvp/out/

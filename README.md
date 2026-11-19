@@ -1,4 +1,9 @@
 # music-structure
+
+The Windows 11 proof of concept is in [mvp/](mvp/README.md). It listens to local Spotify desktop playback and serves a browser score for timbre and returning passages. See the [Windows smoke protocol](mvp/WINDOWS-SMOKE.md) and [evidence record](mvp/EVIDENCE.md).
+
+## Legacy Spotify API viewer
+
 A web application that connects with a user's spotify to show visualizations of the structure of music.
 
 The visualization consists of 6 separate modules each showing distinct musical concepts:
