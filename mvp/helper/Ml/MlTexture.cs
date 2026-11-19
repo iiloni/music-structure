@@ -2,7 +2,7 @@ using System.Threading.Channels;
 
 namespace MusicStructure;
 
-record MlPoint(double Start, double End, int Run, double? Novelty, double InputMs, double InferenceMs, double? AfterWindowMs);
+record MlPoint(double Start, double End, int Run, double? Novelty, double InputMs, double InferenceMs, double? AfterWindowMs, double? Scale = null);
 record MlSnapshot(string State, string Detail, double Threshold, long DroppedPackets, MlPoint[] Points, PersistenceReport Persistence);
 record MlPacket(Packet Packet, double Start, int Generation);
 
@@ -159,7 +159,8 @@ sealed class MlPipeline
             if (!snapshot && seen == revision) return null;
             seen = revision;
             return new MlSnapshot(state, detail, MlTexture.Threshold, Interlocked.Read(ref dropped),
-                points.Where(point => point.End >= from).ToArray(), persistence.Read(from));
+                points.Where(point => point.End >= from).Select(point => point with { Scale = persistence.ScaleAt(point) }).ToArray(),
+                persistence.Read(from));
         }
     }
 

@@ -19,6 +19,8 @@ export interface Mark extends Passage {
 export interface Source { pid: number; started: string; label: string; kind: "spotify" | "local" }
 export interface MlPoint extends Passage {
   run: number; novelty: number | null; inputMs: number; inferenceMs: number; afterWindowMs: number | null;
+  /** Adaptive MusiCNN threshold this hop was judged against; null until the baseline exists. */
+  scale: number | null;
 }
 export type PersistenceVerdict = "provisional" | "brief" | "lasting" | "uncertain";
 export interface PersistenceCue {

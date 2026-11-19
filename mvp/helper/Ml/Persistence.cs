@@ -12,6 +12,11 @@ sealed class Persistence
     readonly Queue<(MlPoint Point, float[] Embedding)> pending = new();
     readonly Queue<Comparison> recent = new();
     readonly Queue<PersistenceCue> decisions = new();
+    // The embedding scale each compared hop was judged against, keyed by run and window end,
+    // so the lane can draw novelty relative to the same adaptive threshold that nominates cues.
+    readonly Queue<(int Run, double End)> scaleOrder = new();
+    readonly Dictionary<(int Run, double End), double> scales = new();
+    double? lastScale;
     Comparison? previous;
     ActiveCue? active;
     int comparisons, nextId;
@@ -72,6 +77,7 @@ sealed class Persistence
         double b = previous is null ? 0 : EmbeddingDistance(embedding, previous.Embedding);
         var current = new Comparison(point, spectrum, embedding, a, b);
         comparisons++;
+        double? scale = active?.EmbeddingScale;
 
         if (active is { } cue)
         {
@@ -90,6 +96,7 @@ sealed class Persistence
         {
             double scaleA = Scale(recent.Select(point => point.SpectrumStep), 1.5);
             double scaleB = Scale(recent.Select(point => point.EmbeddingStep), MlTexture.Threshold);
+            scale = lastScale = scaleB;
             // Either representation may nominate the shared timestamp. Freeze both references
             // and scales at that time so neither decision gets later baseline information.
             if (a >= scaleA || b >= scaleB)
@@ -103,10 +110,21 @@ sealed class Persistence
             }
         }
 
+        // Right after a reset or decision the baseline is still refilling; reuse the last scale.
+        if ((scale ?? lastScale) is double judged && previous is not null) RecordScale(point, judged);
         previous = current;
         if (recent.Count >= 8) recent.Dequeue();
         recent.Enqueue(current);
     }
+
+    void RecordScale(MlPoint point, double scale)
+    {
+        if (scaleOrder.Count >= 601) scales.Remove(scaleOrder.Dequeue());
+        scaleOrder.Enqueue((point.Run, point.End));
+        scales[(point.Run, point.End)] = scale;
+    }
+
+    public double? ScaleAt(MlPoint point) => scales.TryGetValue((point.Run, point.End), out var scale) ? scale : null;
 
     static string Decide(double[] followup, double initial)
     {
@@ -162,6 +180,9 @@ sealed class Persistence
         Interrupt(0, "New listen.");
         frames.Clear();
         decisions.Clear();
+        scaleOrder.Clear();
+        scales.Clear();
+        lastScale = null;
         nextId = comparisons = 0;
         computeMs = 0;
     }

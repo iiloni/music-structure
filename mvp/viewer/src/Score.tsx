@@ -184,20 +184,33 @@ export function Score({ map, selected, select, timbreScale, smoothing, lanes, re
     flush();
 
     if (ml) {
-      const base = mlTop + mlHeight - 8;
-      const range = Math.max(.05, ml.threshold * 4);
-      const y = (score: number) => base - Math.min(1, score / range) * (mlHeight - 17);
+      // Bars are novelty divided by the adaptive scale (3× the recent median step, floored at
+      // ml.threshold) that also nominates candidates, so crossing the line means "candidate-worthy".
+      const base = mlTop + mlHeight - 8, ceiling = 3;
+      const y = (relative: number) => base - Math.min(1, relative / ceiling) * (mlHeight - 17);
+      for (const cue of ml.persistence.cues) {
+        const a = x(cue.time), b = x(cue.confirmedAt ?? cue.dueAt);
+        if (b < x(from)) continue;
+        context.fillStyle = "#f3c97a14";
+        context.fillRect(a, mlTop + 2, Math.max(2, b - a), mlHeight - 6);
+      }
       context.setLineDash([3, 4]);
-      line(x(from), y(ml.threshold), width - 16, y(ml.threshold), "#807868");
+      line(x(from), y(1), width - 16, y(1), "#807868");
       context.setLineDash([]);
       for (const point of ml.points) {
         if (point.novelty === null || point.end < from) continue;
-        const above = point.novelty >= ml.threshold;
-        context.lineWidth = above ? 2 : 1;
         const at = x(point.end);
-        line(at, base, at, y(point.novelty), above ? mlColor : "#a49472");
+        if (point.scale === null) {
+          // Baseline not ready yet: mark the hop without implying a height.
+          context.lineWidth = 1;
+          line(at, base, at, base - 3, "#6f6a5e");
+          continue;
+        }
+        const relative = point.novelty / point.scale, above = relative >= 1;
+        context.lineWidth = above ? 2 : 1;
+        line(at, base, at, y(relative), above ? mlColor : "#a49472");
         context.fillStyle = above ? mlColor : "#a49472";
-        context.fillRect(at - 1, y(point.novelty) - 1, above ? 4 : 2, above ? 4 : 2);
+        context.fillRect(at - 1, y(relative) - 1, above ? 4 : 2, above ? 4 : 2);
       }
       for (const cue of ml.persistence.cues) {
         const at = x(cue.time);
