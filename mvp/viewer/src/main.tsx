@@ -8,7 +8,7 @@ import type { TimbreScale } from "./timbre";
 import { useHelper, type Mark } from "./wire";
 import "./style.css";
 
-const fixtures = { return: "A–B–A study", gain: "Gain step", gap: "Interrupted listen", lanes: "Pulse and harmony", refinement: "Three returns" };
+const fixtures = { return: "A–B–A study", gain: "Gain step", gap: "Interrupted listen", lanes: "Pulse and harmony", refinement: "Three returns", chords: "Chord voicings" };
 type Fixture = keyof typeof fixtures;
 type PaintReading = { index: number; ms: number | null; timestampToPacketReadMs: number | null; afterPacketReadMs: number | null; error: number };
 const active = new Set(["waiting", "capturing", "loading", "stopping"]);
@@ -122,7 +122,7 @@ function App() {
   const latest = map?.frames.at(-1);
 
   function openFixture(mode: "replay" | "fixture") {
-    if (fixture === "lanes") setLabOpen(true);
+    if (fixture === "lanes" || fixture === "chords") setLabOpen(true);
     send({ action: "start", mode, fixture });
   }
 

@@ -32,6 +32,9 @@ static class Verification
                     case "refinement":
                         CheckRefinement(listen, fingerprint);
                         break;
+                    case "chords":
+                        CheckChords(listen);
+                        break;
                     case "lanes":
                         CheckLanes(listen);
                         break;
@@ -71,6 +74,25 @@ static class Verification
             Console.Error.WriteLine($"FAIL: {ex.Message}");
             return 1;
         }
+    }
+
+    static void CheckChords(Listen listen)
+    {
+        string[] expected = ["C", "Am7", "Fmaj7", "G7", "D", "Bm"];
+        int correct = 0;
+        for (int i = 0; i < expected.Length; i++)
+        {
+            int start = i * 4;
+            var frames = listen.Frames.Where(frame => frame.Start >= start && frame.End <= start + 4).ToArray();
+            correct += frames.Count(frame => frame.Lanes!.Chord?.Label == expected[i]);
+            Require(frames.Where(frame => frame.Start >= start + .75)
+                    .All(frame => frame.Lanes!.Chord?.Label == expected[i]),
+                $"Expected stable {expected[i]} after the chord transition at {start}s.");
+        }
+
+        Require(listen.Frames.Where(frame => frame.Start >= 24).All(frame => frame.Lanes!.Chord is null),
+            "Silence, the lone bass note or the ambiguous cluster received a chord label.");
+        Console.WriteLine($"  {correct}/96 chord-section frames correct, including changes; 48/48 control frames unknown.");
     }
 
     static void CheckRefinement(Listen listen, string original)

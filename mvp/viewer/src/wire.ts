@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export interface PitchEstimate { label: string; fit: number }
+export interface PitchEstimate { label: string; fit: number; tentative?: boolean }
 export interface LaneFrame {
   chord: PitchEstimate | null; key: PitchEstimate | null;
   bpm: number | null; tempoFit: number | null; onsets: number[]; beats: number[];

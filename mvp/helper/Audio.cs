@@ -28,6 +28,7 @@ sealed class AudioFeatures
     public const int Rate = 22050;
     const int Size = 2048, Hop = 512, Bands = 24, Taps = 31;
     const double SilenceDb = -58;
+    readonly ChordAnalysis chords = new(Rate, Size);
     readonly double[] lowpass = new double[Taps], input = new double[Taps], ring = new double[Size];
     readonly double[] real = new double[Size], imag = new double[Size], hann = new double[Size];
     readonly double[] cos = new double[Size / 2], sin = new double[Size / 2];
@@ -77,6 +78,7 @@ sealed class AudioFeatures
     {
         Array.Clear(input);
         Array.Clear(previousSpectrum);
+        chords.Reset();
         sourceCount = samples = 0;
         batch = 1;
         ClearBatch();
@@ -90,7 +92,7 @@ sealed class AudioFeatures
         sumPower = sumCentroid = 0;
     }
 
-    public void Add(short[] stereo, Action<double, double, double, double, bool, double[], double[]> emit, Action<double, double> pulse)
+    public void Add(short[] stereo, Action<double, double, double, double, bool, double[], double[], ChordEvidence> emit, Action<double, double> pulse)
     {
         for (int i = 0; i < stereo.Length; i += Packet.Channels)
         {
@@ -116,7 +118,7 @@ sealed class AudioFeatures
             double[] shape = bandSum.Select(x => x / Math.Max(1, audible)).ToArray();
             double[] harmony = (double[])pitchSum.Clone();
             Normalize(harmony);
-            emit((batch - 1) / 4.0, batch / 4.0, rmsDb, sumCentroid / Math.Max(1, audible), hasMusic, shape, harmony);
+            emit((batch - 1) / 4.0, batch / 4.0, rmsDb, sumCentroid / Math.Max(1, audible), hasMusic, shape, harmony, chords.Take());
             batch++;
             ClearBatch();
         }
@@ -185,6 +187,7 @@ sealed class AudioFeatures
             previousSpectrum[k] = band;
         }
         pulse(spectrumTime, flux);
+        chords.Observe(powers);
 
         // Spectral peaks in the lower registers reduce leakage and upper harmonic bias.
         for (int k = 6; k <= 140; k++)

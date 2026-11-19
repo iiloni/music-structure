@@ -10,7 +10,7 @@ record Batch(int Version, string AnalysisVersion, string SessionId, long Sequenc
 
 sealed class Listen(double startMs, string mode, string source)
 {
-    public const string AnalysisVersion = "score-2";
+    public const string AnalysisVersion = "score-3";
     public const double HistorySeconds = 600;
     public string Id { get; } = Guid.NewGuid().ToString("N");
     public string Mode { get; } = mode;
@@ -90,7 +90,7 @@ sealed class Listen(double startMs, string mode, string source)
         additional ??= new AdditionalLanes(Publish, () => ++markId);
         double computeStart = Clock.Milliseconds;
         long before = featureCount;
-        features.Add(packet.Samples, (start, end, rms, centroid, audible, mel, chroma) =>
+        features.Add(packet.Samples, (start, end, rms, centroid, audible, mel, chroma, pitches) =>
         {
             double sessionEnd = segmentStart + end;
             var frame = new Feature(++featureCount, segmentStart + start, sessionEnd,
@@ -100,7 +100,7 @@ sealed class Listen(double startMs, string mode, string source)
             {
                 PacketReadMs = includePaintClock ? packet.PacketReadMs : null
             };
-            frame = frame with { Lanes = additional.Add(frame, segmentStart) };
+            frame = frame with { Lanes = additional.Add(frame, segmentStart, pitches) };
             Frames.Enqueue(frame);
             InputDb = rms;
             coverageEnd = sessionEnd;

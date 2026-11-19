@@ -1,16 +1,13 @@
 namespace MusicStructure;
 
-record PitchEstimate(string Label, double Fit);
+record PitchEstimate(string Label, double Fit,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    bool Tentative = false);
 record LaneFrame(PitchEstimate? Chord, PitchEstimate? Key, double? Bpm, double? TempoFit, double[] Onsets, double[] Beats);
 
 sealed class AdditionalLanes(Action<Mark> publish, Func<int> nextId)
 {
     static readonly string[] PitchNames = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
-    static readonly double[][] Chords =
-    [
-        [1, 0, 0, 0, .9, 0, 0, .9, 0, 0, 0, 0],
-        [1, 0, 0, .9, 0, 0, 0, .9, 0, 0, 0, 0]
-    ];
     static readonly double[][] Keys =
     [
         [1, 0, .43, 0, .68, .46, 0, .8, 0, .48, 0, .32],
@@ -20,6 +17,7 @@ sealed class AdditionalLanes(Action<Mark> publish, Func<int> nextId)
     readonly Queue<Feature> recent = new();
     readonly PulseTempo tempo = new();
     PitchEstimate? chord, key;
+    readonly Queue<ChordEvidence> recentChords = new(3);
     string? chordCandidate, keyCandidate;
     int chordRun, keyRun;
     double lastEvent = double.NegativeInfinity;
@@ -29,6 +27,7 @@ sealed class AdditionalLanes(Action<Mark> publish, Func<int> nextId)
         recent.Clear();
         tempo.Reset();
         chord = key = null;
+        recentChords.Clear();
         chordCandidate = keyCandidate = null;
         chordRun = keyRun = 0;
         lastEvent = double.NegativeInfinity;
@@ -36,16 +35,19 @@ sealed class AdditionalLanes(Action<Mark> publish, Func<int> nextId)
 
     public void ObservePulse(double time, double flux) => tempo.Observe(time, flux);
 
-    public LaneFrame Add(Feature frame, double segmentStart)
+    public LaneFrame Add(Feature frame, double segmentStart, ChordEvidence pitches)
     {
         recent.Enqueue(frame);
         if (recent.Count > KeyFrames) recent.Dequeue();
         var history = recent.ToArray();
 
-        var chordFit = frame.Audible ? Match(history.TakeLast(2), Chords, false, .72, .075) : null;
-        Sustain(chordFit, 2, ref chord, ref chordCandidate, ref chordRun);
+        recentChords.Enqueue(pitches);
+        if (recentChords.Count > 3) recentChords.Dequeue();
+        var chordFit = frame.Audible ? ChordAnalysis.Match(recentChords, PitchNames) : null;
+        Sustain(chordFit, chordFit is null ? 3 : 2, ref chord, ref chordCandidate, ref chordRun);
         if (!frame.Audible)
         {
+            recentChords.Clear();
             chord = null;
             chordCandidate = null;
             chordRun = 0;
@@ -53,7 +55,7 @@ sealed class AdditionalLanes(Action<Mark> publish, Func<int> nextId)
 
         if (history.Length == KeyFrames)
         {
-            var keyFit = Match(history, Keys, true, .68, .028);
+            var keyFit = MatchKey(history);
             Sustain(keyFit, 4, ref key, ref keyCandidate, ref keyRun);
         }
 
@@ -74,7 +76,7 @@ sealed class AdditionalLanes(Action<Mark> publish, Func<int> nextId)
         if (++run >= required) current = estimate;
     }
 
-    static PitchEstimate? Match(IEnumerable<Feature> window, double[][] profiles, bool isKey, double minimumFit, double margin)
+    static PitchEstimate? MatchKey(IEnumerable<Feature> window)
     {
         var mean = new double[12];
         int total = 0, audible = 0;
@@ -87,13 +89,13 @@ sealed class AdditionalLanes(Action<Mark> publish, Func<int> nextId)
         }
         double norm = Math.Sqrt(mean.Sum(v => v * v));
         if (audible < total * .75 || norm <= 0) return null;
-        if (isKey && mean.Count(v => v >= .16 * norm) < 5) return null;
+        if (mean.Count(v => v >= .16 * norm) < 5) return null;
 
         double best = 0, runnerUp = 0;
         int bestRoot = 0, bestMode = 0;
         for (int mode = 0; mode < 2; mode++)
         {
-            var profile = profiles[mode];
+            var profile = Keys[mode];
             double scale = norm * Math.Sqrt(profile.Sum(v => v * v));
             for (int root = 0; root < 12; root++)
             {
@@ -111,8 +113,8 @@ sealed class AdditionalLanes(Action<Mark> publish, Func<int> nextId)
             }
         }
 
-        if (best < minimumFit || best - runnerUp < margin) return null;
-        string suffix = isKey ? (bestMode == 0 ? " major" : " minor") : (bestMode == 0 ? "" : "m");
+        if (best < .68 || best - runnerUp < .028) return null;
+        string suffix = bestMode == 0 ? " major" : " minor";
         return new PitchEstimate(PitchNames[bestRoot] + suffix, Math.Min(best, 1));
     }
 

@@ -250,7 +250,8 @@ export function Score({ map, selected, select, timbreScale, smooth, lanes, refin
       {lanes.includes("tempo") && <><dt>Tempo</dt><dd>{inspected?.lanes?.bpm == null ? "Unknown" :
         `${Math.round(inspected.lanes.bpm)} BPM${(inspected.lanes.tempoFit ?? 0) < .6 ? " (tentative)" : ""}`}</dd></>}
       {lanes.includes("key") && <><dt>Tonality</dt><dd>{inspected?.lanes?.key?.label ?? "Unknown"}</dd></>}
-      {lanes.includes("chord") && <><dt>Chord</dt><dd>{inspected?.lanes?.chord?.label ?? "Unknown"}</dd></>}
+      {lanes.includes("chord") && <><dt>Chord</dt><dd>{inspected?.lanes?.chord?.label ?? "Unknown"}
+        {inspected?.lanes?.chord?.tentative && " (tentative)"}</dd></>}
       {lanes.includes("event") && <><dt>Events</dt><dd>{events.filter(mark => mark.kind === "event").length} visible</dd></>}
     </dl>
   </div>}

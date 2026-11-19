@@ -29,9 +29,11 @@ Choose **Show listening lab** above the song map. Use the checkboxes to compare 
 | Events | Click an orange star and listen around its timestamp. A hit or brief texture change should stand out from what came just before it. |
 | Tempo | Tap along to a steady section and compare with the BPM. Pale ticks are observed onsets. Taller bright ticks are onsets that also fit the estimated beat. Half-time and double-time readings are possible. |
 | Tonality | Give this lane roughly 12 seconds of harmonic context. Compare its estimated key with a known tonal center and note whether a real modulation produces a convincing change. |
-| Chords | Compare a progression you know by ear or can play along with. The estimator fits major and minor triads and shows unknown when the evidence is weak. |
+| Chords | Compare a progression you know by ear or can play along with. The estimator fits major and minor triads and common seventh chords, including voicings with a different bass note. A question mark after a label means tentative. Unknown appears when the pitch evidence is too weak or ambiguous. |
 
 For a known control, choose **Pulse and harmony** and **Open replay**. The study contains a 120 BPM C-major section, a 90 BPM E-flat-major section, accents around 10 and 38 seconds, silence at 48 seconds and a simulated gap from 52 to 56 seconds. The harmony and tempo estimates use recent context, so changes can follow the section boundary by several seconds. The generated control establishes basic behavior. Use familiar Spotify recordings to judge how much each lane helps.
+
+For the chord-specific control, open **Chord voicings**. Its chord roots and qualities at 2, 6, 10, 14, 18 and 22 seconds are **C, Am7, Fmaj7, G7, D and Bm**. The C and D voicings have E and F-sharp in the bass, respectively. From 24 seconds the sound is silence, a lone bass note and an ambiguous cluster. Inspect those ranges for **Unknown**.
 
 ## Compare original and refined scores
 
@@ -43,7 +45,7 @@ The pass uses the retained feature history, up to ten minutes. It searches for s
 
 ## Generate or replay without Spotify
 
-The fixture menu has an A–B–A study, a constant-texture gain step, an interrupted listen, a pulse-and-harmony control and a repeat-family study. **Run in real time** feeds synthetic PCM into the normal sample queue while the map advances. **Open replay** sends the completed feature map through the same versioned socket and viewer. Generated fixtures are silent to the listener.
+The fixture menu has an A–B–A study, a constant-texture gain step, an interrupted listen, a pulse-and-harmony control, a repeat-family study and a chord-voicing study. **Run in real time** feeds synthetic PCM into the normal sample queue while the map advances. **Open replay** sends the completed feature map through the same versioned socket and viewer. Generated fixtures are silent to the listener.
 
 On any platform with the SDK, build and run the fixture viewer from the repository root:
 

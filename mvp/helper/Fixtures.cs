@@ -2,7 +2,7 @@ namespace MusicStructure;
 
 static class Fixtures
 {
-    public static readonly string[] Names = ["return", "gain", "gap", "lanes", "refinement"];
+    public static readonly string[] Names = ["return", "gain", "gap", "lanes", "refinement", "chords"];
     public const int BlockFrames = Packet.Rate / 20;
     static readonly int[][] Return =
     [
@@ -28,6 +28,7 @@ static class Fixtures
 
     public static IEnumerable<Packet> Packets(string name)
     {
+        if (name == "chords") return ChordStudy();
         if (name == "lanes") return LaneStudy();
         if (name == "refinement") return RefinementStudy();
         return ExistingFixture(name);
@@ -125,6 +126,36 @@ static class Fixtures
             yield return new Packet(block, elapsed * 1000, stereo);
         }
     }
+    static IEnumerable<Packet> ChordStudy()
+    {
+        int[][] voicings = [[40, 60, 64, 67, 72], [45, 60, 64, 67, 69], [41, 60, 64, 65, 69],
+            [43, 59, 62, 65, 67], [42, 62, 66, 69, 74], [47, 59, 62, 66, 71]];
+        for (int block = 0; block < 36 * 20; block++)
+        {
+            double elapsed = block / 20.0;
+            int[] notes = elapsed < 24 ? voicings[(int)(elapsed / 4)] :
+                elapsed < 26 ? [] : elapsed < 31 ? [45] : [48, 49, 51, 54, 55, 58, 64, 65, 67, 69];
+            var frequencies = notes.Select(note => 440 * Math.Pow(2, (note - 69) / 12.0)).ToArray();
+            var stereo = new short[BlockFrames * Packet.Channels];
+            for (int sample = 0; sample < BlockFrames; sample++)
+            {
+                double time = elapsed + (double)sample / Packet.Rate;
+                double signal = 0;
+                for (int k = 0; k < frequencies.Length; k++)
+                {
+                    double hz = frequencies[k], phase = 2 * Math.PI * hz * time;
+                    double strength = elapsed >= 31 ? .07 : k == 0 ? .28 : .085 + (k % 3) * .018;
+                    double attack = .65 + .35 * Math.Exp(-5 * ((time + .07 * k) % .5));
+                    signal += strength * attack * (Math.Sin(phase) + .45 * Math.Sin(2 * phase) +
+                        .24 * Math.Sin(3 * phase) + .14 * Math.Sin(4 * phase) + .10 * Math.Sin(5 * phase));
+                }
+                short value = (short)Math.Clamp(signal * 32767 * .65, short.MinValue, short.MaxValue);
+                stereo[sample * 2] = stereo[sample * 2 + 1] = value;
+            }
+            yield return new Packet(block, elapsed * 1000, stereo);
+        }
+    }
+
     static IEnumerable<Packet> RefinementStudy()
     {
         for (int block = 0; block < 1490; block++)

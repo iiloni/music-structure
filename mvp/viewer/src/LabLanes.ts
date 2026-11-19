@@ -78,7 +78,10 @@ function drawHarmony(context: CanvasRenderingContext2D, row: LaneRow, kind: "key
   }
 
   for (const frame of frames) {
-    const label = frame.valid && frame.audible ? frame.lanes?.[kind]?.label ?? "?" : null;
+    const estimate = frame.lanes?.[kind];
+    const label = frame.valid && frame.audible
+      ? estimate ? estimate.label + (estimate.tentative ? "?" : "") : "?"
+      : null;
     if (label && run?.label === label && run.segment === frame.segment && Math.abs(run.end - frame.start) < .001) {
       run.end = frame.end;
       continue;

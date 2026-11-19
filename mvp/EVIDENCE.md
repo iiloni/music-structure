@@ -27,6 +27,10 @@ The `refine-1` pass on **Three returns** grouped 0–12, 22–34.5 and 46–58.5
 
 The refinement fixture uses clean, fixed-tempo passages. These results establish behavior under the generated control. Use familiar Spotify songs to evaluate boundary placement and repeating passages in actual listening.
 
+## Chord coverage
+
+The `score-3` chord detector separates bass from higher pitch evidence, estimates pitches between FFT bins, and uses common seventh-chord templates. On **Chord voicings**, the previous detector returned Unknown for all 96 chord-section frames. The revised detector labeled 85 of 96 correctly, including the initial settling period and transitions. The remaining twelve seconds of silence, monophonic bass and an ambiguous cluster stayed Unknown. These are generated results. Spotify coverage and label accuracy remain a listening check.
+
 ## Physical measurements pending
 
 | Trial | Status |
