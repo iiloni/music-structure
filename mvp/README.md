@@ -20,6 +20,16 @@ The build checks TypeScript, bundles React and the fonts into the helper, and pu
 4. Choose **Stop** to freeze the score, then open **Evaluation summary**. Add setup notes and save timestamped features, findings and counters as JSON. Closing the listening tab stops capture. Press Ctrl+C in the helper console to exit.
 5. After a Spotify restart or capture error, **Refresh playback sources** and **Resume capture**. This preserves available history and places a gap before newly captured material. Use **New listen** to clear the map.
 
+### Update, rebuild, and launch
+
+Quit the running helper with Ctrl+C before updating. From the repository root, run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\mvp\scripts\Update-And-Run-Windows.ps1
+```
+
+The script requires Git and a clean working tree. It pulls the current branch from its configured upstream, or from the same branch on `origin` if no upstream is configured. It accepts only fast-forward updates and launches the helper after a successful build. Add `-Demo` to start with the A–B–A replay or `-NoOpen` to print the URL without opening a browser.
+
 ## Experimental ML texture and persistence A/B
 
 For VLC process capture, model installation, and the listening comparison, see the [ML texture guide](ML-TEXTURE.md). It also records the generated control results and CPU measurements.
