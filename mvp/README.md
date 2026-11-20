@@ -25,10 +25,10 @@ The build checks TypeScript, bundles React and the fonts into the helper, and pu
 Quit the running helper with Ctrl+C before updating. From the repository root, run:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\mvp\scripts\Update-And-Run-Windows.ps1
+.\mvp\scripts\Update-And-Run-Windows.cmd
 ```
 
-The script requires Git and a clean working tree. It pulls the current branch from its configured upstream, or from the same branch on `origin` if no upstream is configured. It accepts only fast-forward updates and launches the helper after a successful build. Add `-Demo` to start with the A–B–A replay or `-NoOpen` to print the URL without opening a browser.
+The script requires Git and a clean working tree. It pulls the current branch from its configured upstream, or from the same branch on `origin` if no upstream is configured. It accepts only fast-forward updates and launches the helper after a successful build. Add `-Demo` to start with the A–B–A replay or `-NoOpen` to print the URL without opening a browser. You can also double-click the `.cmd` file in Explorer.
 
 ## Experimental ML texture and persistence A/B
 
